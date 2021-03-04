@@ -36,6 +36,8 @@ type Backend interface {
 	HeaderByHash(ctx context.Context, blockHash common.Hash) (*types.Header, error)
 	GetReceipts(ctx context.Context, blockHash common.Hash) (types.Receipts, error)
 	GetLogs(ctx context.Context, blockHash common.Hash) ([][]*types.Log, error)
+	GetBorBlockReceipt(ctx context.Context, blockHash common.Hash) (*types.Receipt, error)
+	GetBorBlockLogs(ctx context.Context, blockHash common.Hash) ([]*types.Log, error)
 
 	SubscribeNewTxsEvent(chan<- core.NewTxsEvent) event.Subscription
 	SubscribeChainEvent(ch chan<- core.ChainEvent) event.Subscription
@@ -45,6 +47,8 @@ type Backend interface {
 
 	BloomStatus() (uint64, uint64)
 	ServiceFilter(ctx context.Context, session *bloombits.MatcherSession)
+
+	SubscribeStateSyncEvent(ch chan<- core.StateSyncEvent) event.Subscription
 }
 
 // Filter can be used to retrieve and filter logs.

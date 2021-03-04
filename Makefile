@@ -11,6 +11,19 @@
 GOBIN = ./build/bin
 GO ?= latest
 GORUN = env GO111MODULE=on go run
+GOPATH = $(shell go env GOPATH)
+
+bor:
+	$(GORUN) build/ci.go install ./cmd/geth
+	mkdir -p $(GOPATH)/bin/
+	cp $(GOBIN)/geth $(GOBIN)/bor
+	cp $(GOBIN)/* $(GOPATH)/bin/
+
+bor-all:
+	$(GORUN) build/ci.go install
+	mkdir -p $(GOPATH)/bin/
+	cp $(GOBIN)/geth $(GOBIN)/bor
+	cp $(GOBIN)/* $(GOPATH)/bin/
 
 geth:
 	$(GORUN) build/ci.go install ./cmd/geth
@@ -33,7 +46,9 @@ ios:
 	@echo "Import \"$(GOBIN)/Geth.framework\" to use the library."
 
 test: all
-	$(GORUN) build/ci.go test
+	# $(GORUN) build/ci.go test
+	go test github.com/ethereum/go-ethereum/consensus/bor
+	go test github.com/ethereum/go-ethereum/tests/bor
 
 lint: ## Run linters.
 	$(GORUN) build/ci.go lint
