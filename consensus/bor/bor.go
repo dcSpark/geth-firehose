@@ -1122,10 +1122,13 @@ func (c *Bor) CommitStates(
 
 	to := time.Unix(int64(chain.Chain.GetHeaderByNumber(number-c.config.Sprint).Time), 0)
 	lastStateID := _lastStateID.Uint64()
-	log.Info(
-		"Fetching state updates from Heimdall",
-		"fromID", lastStateID+1,
-		"to", to.Format(time.RFC3339))
+
+	if number%10000 == 0 {
+		log.Info(
+			"Fetching state updates from Heimdall (printed each 10K blocks)",
+			"fromID", lastStateID+1,
+			"to", to.Format(time.RFC3339))
+	}
 	eventRecords, err := c.HeimdallClient.FetchStateSyncEvents(lastStateID+1, to.Unix())
 
 	chainID := c.chainConfig.ChainID.String()

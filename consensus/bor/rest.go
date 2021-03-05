@@ -46,9 +46,10 @@ func NewHeimdallClient(urlString string) (*HeimdallClient, error) {
 
 func (h *HeimdallClient) FetchStateSyncEvents(fromID uint64, to int64) ([]*EventRecordWithTime, error) {
 	eventRecords := make([]*EventRecordWithTime, 0)
+
 	for {
 		queryParams := fmt.Sprintf("from-id=%d&to-time=%d&limit=%d", fromID, to, stateFetchLimit)
-		log.Info("Fetching state sync events", "queryParams", queryParams)
+		log.Debug("Fetching state sync events (printed each 25 fromID)", "queryParams", queryParams)
 		response, err := h.FetchWithRetry("clerk/event-record/list", queryParams)
 		if err != nil {
 			return nil, err
