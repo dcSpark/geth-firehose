@@ -7,6 +7,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/state"
+	"github.com/ethereum/go-ethereum/deepmind"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 )
@@ -276,7 +277,7 @@ func init() {
 	}
 }
 
-func UpgradeBuildInSystemContract(config *params.ChainConfig, blockNumber *big.Int, statedb *state.StateDB) {
+func UpgradeBuildInSystemContract(config *params.ChainConfig, blockNumber *big.Int, statedb *state.StateDB, dmContext *deepmind.Context) {
 	if config == nil || blockNumber == nil || statedb == nil {
 		return
 	}
@@ -295,15 +296,15 @@ func UpgradeBuildInSystemContract(config *params.ChainConfig, blockNumber *big.I
 
 	logger := log.New("system-contract-upgrade", network)
 	if config.IsOnRamanujan(blockNumber) {
-		applySystemContractUpgrade(ramanujanUpgrade[network], blockNumber, statedb, logger)
+		applySystemContractUpgrade(ramanujanUpgrade[network], blockNumber, statedb, logger, dmContext)
 	}
 
 	if config.IsOnNiels(blockNumber) {
-		applySystemContractUpgrade(nielsUpgrade[network], blockNumber, statedb, logger)
+		applySystemContractUpgrade(nielsUpgrade[network], blockNumber, statedb, logger, dmContext)
 	}
 
 	if config.IsOnMirrorSync(blockNumber) {
-		applySystemContractUpgrade(mirrorUpgrade[network], blockNumber, statedb, logger)
+		applySystemContractUpgrade(mirrorUpgrade[network], blockNumber, statedb, logger, dmContext)
 	}
 
 	/*
@@ -311,7 +312,7 @@ func UpgradeBuildInSystemContract(config *params.ChainConfig, blockNumber *big.I
 	*/
 }
 
-func applySystemContractUpgrade(upgrade *Upgrade, blockNumber *big.Int, statedb *state.StateDB, logger log.Logger) {
+func applySystemContractUpgrade(upgrade *Upgrade, blockNumber *big.Int, statedb *state.StateDB, logger log.Logger, dmContext *deepmind.Context) {
 	if upgrade == nil {
 		logger.Info("Empty upgrade config", "height", blockNumber.String())
 		return
@@ -332,7 +333,7 @@ func applySystemContractUpgrade(upgrade *Upgrade, blockNumber *big.Int, statedb 
 		if err != nil {
 			panic(fmt.Errorf("failed to decode new contract code: %s", err.Error()))
 		}
-		statedb.SetCode(cfg.ContractAddr, newContractCode)
+		statedb.SetCode(cfg.ContractAddr, newContractCode, dmContext)
 
 		if cfg.AfterUpgrade != nil {
 			err := cfg.AfterUpgrade(blockNumber, cfg.ContractAddr, statedb)

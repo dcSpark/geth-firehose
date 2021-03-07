@@ -24,6 +24,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/deepmind"
 	"github.com/ethereum/go-ethereum/eth/downloader"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p/enode"
@@ -285,6 +286,14 @@ func (cs *chainSyncer) startSync(op *chainSyncOp) {
 
 // doSync synchronizes the local blockchain with a remote peer.
 func (pm *ProtocolManager) doSync(op *chainSyncOp) error {
+	if deepmind.Enabled {
+		// We want to override the feature up here that bases its fast sync decision on
+		// CurrentFastBlock.
+		// Our goal is to process everything at the slow speed, to extract all computations.
+		op.mode = downloader.FullSync
+		atomic.StoreUint32(&pm.fastSync, 0)
+	}
+
 	// Run the sync cycle, and disable fast sync if we're past the pivot block
 	err := pm.downloader.Synchronise(op.peer.id, op.head, op.td, op.mode)
 	if err != nil {

@@ -40,6 +40,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/deepmind"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/node"
@@ -227,15 +228,15 @@ func (e *NoRewardEngine) accumulateRewards(config *params.ChainConfig, state *st
 	// Simply touch miner and uncle coinbase accounts
 	reward := big.NewInt(0)
 	for _, uncle := range uncles {
-		state.AddBalance(uncle.Coinbase, reward)
+		state.AddBalance(uncle.Coinbase, reward, false, deepmind.NoOpContext, deepmind.BalanceChangeReason("reward_mine_uncle"))
 	}
-	state.AddBalance(header.Coinbase, reward)
+	state.AddBalance(header.Coinbase, reward, false, deepmind.NoOpContext, deepmind.BalanceChangeReason("reward_mine_block"))
 }
 
 func (e *NoRewardEngine) Finalize(chain consensus.ChainReader, header *types.Header, statedb *state.StateDB, txs *[]*types.Transaction,
-	uncles []*types.Header, receipts *[]*types.Receipt, systemTxs *[]*types.Transaction, usedGas *uint64) (err error) {
+	uncles []*types.Header, receipts *[]*types.Receipt, systemTxs *[]*types.Transaction, usedGas *uint64, dmContext *deepmind.Context) (err error) {
 	if e.rewardsOn {
-		err = e.inner.Finalize(chain, header, statedb, txs, uncles, receipts, systemTxs, usedGas)
+		err = e.inner.Finalize(chain, header, statedb, txs, uncles, receipts, systemTxs, usedGas, dmContext)
 	} else {
 		e.accumulateRewards(chain.Config(), statedb, header, uncles)
 		header.Root = statedb.IntermediateRoot(chain.Config().IsEIP158(header.Number))
@@ -244,9 +245,9 @@ func (e *NoRewardEngine) Finalize(chain consensus.ChainReader, header *types.Hea
 }
 
 func (e *NoRewardEngine) FinalizeAndAssemble(chain consensus.ChainReader, header *types.Header, statedb *state.StateDB, txs []*types.Transaction,
-	uncles []*types.Header, receipts []*types.Receipt) (*types.Block, []*types.Receipt, error) {
+	uncles []*types.Header, receipts []*types.Receipt, dmContext *deepmind.Context) (*types.Block, []*types.Receipt, error) {
 	if e.rewardsOn {
-		return e.inner.FinalizeAndAssemble(chain, header, statedb, txs, uncles, receipts)
+		return e.inner.FinalizeAndAssemble(chain, header, statedb, txs, uncles, receipts, dmContext)
 	} else {
 		e.accumulateRewards(chain.Config(), statedb, header, uncles)
 		header.Root = statedb.IntermediateRoot(chain.Config().IsEIP158(header.Number))
@@ -512,9 +513,9 @@ func (api *RetestethAPI) mineBlock() error {
 		return err
 	}
 	if api.chainConfig.DAOForkSupport && api.chainConfig.DAOForkBlock != nil && api.chainConfig.DAOForkBlock.Cmp(header.Number) == 0 {
-		misc.ApplyDAOHardFork(statedb)
+		misc.ApplyDAOHardFork(statedb, deepmind.NoOpContext)
 	}
-	systemcontracts.UpgradeBuildInSystemContract(api.chainConfig, header.Number, statedb)
+	systemcontracts.UpgradeBuildInSystemContract(api.chainConfig, header.Number, statedb, deepmind.NoOpContext)
 	gasPool := new(core.GasPool).AddGas(header.GasLimit)
 	txCount := 0
 	var txs []*types.Transaction
@@ -538,6 +539,7 @@ func (api *RetestethAPI) mineBlock() error {
 					gasPool,
 					statedb,
 					header, tx, &header.GasUsed, *api.blockchain.GetVMConfig(),
+					deepmind.NoOpContext,
 				)
 				if err != nil {
 					statedb.RevertToSnapshot(snap)
@@ -561,7 +563,7 @@ func (api *RetestethAPI) mineBlock() error {
 			}
 		}
 	}
-	block, _, err := api.engine.FinalizeAndAssemble(api.blockchain, header, statedb, txs, []*types.Header{}, receipts)
+	block, _, err := api.engine.FinalizeAndAssemble(api.blockchain, header, statedb, txs, []*types.Header{}, receipts, deepmind.NoOpContext)
 	if err != nil {
 		return err
 	}
@@ -692,7 +694,7 @@ func (api *RetestethAPI) AccountRange(ctx context.Context,
 			msg, _ := tx.AsMessage(signer)
 			context := core.NewEVMContext(msg, block.Header(), api.blockchain, nil)
 			// Not yet the searched for transaction, execute on top of the current state
-			vmenv := vm.NewEVM(context, statedb, api.blockchain.Config(), vm.Config{})
+			vmenv := vm.NewEVM(context, statedb, api.blockchain.Config(), vm.Config{}, deepmind.NoOpContext)
 			if _, _, _, err := core.ApplyMessage(vmenv, msg, new(core.GasPool).AddGas(tx.Gas())); err != nil {
 				return AccountRangeResult{}, fmt.Errorf("transaction %#x failed: %v", tx.Hash(), err)
 			}
@@ -802,7 +804,7 @@ func (api *RetestethAPI) StorageRangeAt(ctx context.Context,
 			msg, _ := tx.AsMessage(signer)
 			context := core.NewEVMContext(msg, block.Header(), api.blockchain, nil)
 			// Not yet the searched for transaction, execute on top of the current state
-			vmenv := vm.NewEVM(context, statedb, api.blockchain.Config(), vm.Config{})
+			vmenv := vm.NewEVM(context, statedb, api.blockchain.Config(), vm.Config{}, deepmind.NoOpContext)
 			if _, _, _, err := core.ApplyMessage(vmenv, msg, new(core.GasPool).AddGas(tx.Gas())); err != nil {
 				return StorageRangeResult{}, fmt.Errorf("transaction %#x failed: %v", tx.Hash(), err)
 			}

@@ -23,6 +23,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/math"
+	"github.com/ethereum/go-ethereum/deepmind"
 	"github.com/ethereum/go-ethereum/log"
 )
 
@@ -164,9 +165,13 @@ func (in *EVMInterpreter) Run(contract *Contract, input []byte, readOnly bool) (
 
 	// TODO  temporary fix for issue
 	// Don't bother with the execution if there's no code.
-	//if len(contract.Code) == 0 {
-	//	return nil, nil
-	//}
+	if len(contract.Code) == 0 {
+		if in.evm.dmContext.Enabled() {
+			in.evm.dmContext.RecordCallWithoutCode()
+		}
+
+		//	return nil, nil
+	}
 
 	var (
 		op          OpCode        // current opcode
@@ -243,9 +248,19 @@ func (in *EVMInterpreter) Run(contract *Contract, input []byte, readOnly bool) (
 				return nil, errWriteProtection
 			}
 		}
+
+		// Deep mind instead of impacting performance with a `defer` here, we have a "finalizer" call inserted where `return` are performed in the flow
+		maybeAfterCallGasEvent := func() {}
+		if in.evm.dmContext.Enabled() && ShouldRecordCallGasEventForOpCode(op) {
+			in.evm.dmContext.RecordBeforeCallGasEvent(contract.Gas)
+			maybeAfterCallGasEvent = func() { in.evm.dmContext.RecordAfterCallGasEvent(contract.Gas) }
+		}
+
 		// Static portion of gas
 		cost = operation.constantGas // For tracing
-		if !contract.UseGas(operation.constantGas) {
+		// Deep mind we ignore constant cost because below, we perform a single GAS_CHANGE for both constant + dynamic to aggregate the 2 gas change events
+		if !contract.UseGas(operation.constantGas, deepmind.IgnoredGasChangeReason) {
+			maybeAfterCallGasEvent()
 			return nil, ErrOutOfGas
 		}
 
@@ -257,11 +272,13 @@ func (in *EVMInterpreter) Run(contract *Contract, input []byte, readOnly bool) (
 		if operation.memorySize != nil {
 			memSize, overflow := operation.memorySize(stack)
 			if overflow {
+				maybeAfterCallGasEvent()
 				return nil, errGasUintOverflow
 			}
 			// memory is expanded in words of 32 bytes. Gas
 			// is also calculated in words.
 			if memorySize, overflow = math.SafeMul(toWordSize(memSize), 32); overflow {
+				maybeAfterCallGasEvent()
 				return nil, errGasUintOverflow
 			}
 		}
@@ -272,10 +289,28 @@ func (in *EVMInterpreter) Run(contract *Contract, input []byte, readOnly bool) (
 			var dynamicCost uint64
 			dynamicCost, err = operation.dynamicGas(in.evm, contract, stack, mem, memorySize)
 			cost += dynamicCost // total cost, for debug tracing
-			if err != nil || !contract.UseGas(dynamicCost) {
+
+			// Deep mind we ignore dynamic cost because later below, we perform a single GAS_CHANGE for both constant + dynamic to aggregate the 2 gas change events
+			if err != nil || !contract.UseGas(dynamicCost, deepmind.IgnoredGasChangeReason) {
+				maybeAfterCallGasEvent()
 				return nil, ErrOutOfGas
 			}
 		}
+
+		if in.evm.dmContext.Enabled() && cost != 0 {
+			gasChangeReason := OpCodeToGasChangeReason(op)
+			if gasChangeReason != deepmind.IgnoredGasChangeReason {
+				// When execution reach this point, `contract.UseGas` has been called once
+				// (for only a static) or twice (for both static + dynamic cost). Since it
+				// has been called, it's mean the `c.Gas` has already been adjusted down
+				// to remaining after cost.
+				//
+				// Hence to retrieve the `gasOld` value, we need to come back at state when
+				// gas was not consumed, which means doing `contract.Gas + cost`.
+				in.evm.dmContext.RecordGasConsume(contract.Gas+cost, cost, gasChangeReason)
+			}
+		}
+
 		if memorySize > 0 {
 			mem.Resize(memorySize)
 		}
@@ -287,6 +322,10 @@ func (in *EVMInterpreter) Run(contract *Contract, input []byte, readOnly bool) (
 
 		// execute the operation
 		res, err = operation.execute(&pc, in, callContext)
+
+		// Deep mind record after call event last here since operation has been executed
+		maybeAfterCallGasEvent()
+
 		// verifyPool is a build flag. Pool verification makes sure the integrity
 		// of the integer pool by comparing values to a default value.
 		if verifyPool {
@@ -302,6 +341,9 @@ func (in *EVMInterpreter) Run(contract *Contract, input []byte, readOnly bool) (
 		case err != nil:
 			return nil, err
 		case operation.reverts:
+			// DMLOG: we could print that the execution was REVERTed here,
+			// to inform those who want to know where it failed.
+			// Perhaps we need an ID of execution.. which contract this arrived on.
 			return res, errExecutionReverted
 		case operation.halts:
 			return res, nil
