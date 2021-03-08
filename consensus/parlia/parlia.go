@@ -949,8 +949,8 @@ func (p *Parlia) distributeIncoming(val common.Address, state *state.StateDB, he
 	if balance.Cmp(common.Big0) <= 0 {
 		return nil
 	}
-	state.SetBalance(consensus.SystemAddress, big.NewInt(0), dmContext, deepmind.BalanceChangeReason("reward_bsc_system_address"))
-	state.AddBalance(coinbase, balance, false, dmContext, deepmind.BalanceChangeReason("reward_bsc_validate_block"))
+	state.SetBalance(consensus.SystemAddress, big.NewInt(0), dmContext, deepmind.BalanceChangeReason("reward_transfaction_fee"))
+	state.AddBalance(coinbase, balance, false, dmContext, deepmind.BalanceChangeReason("reward_transfaction_fee"))
 
 	doDistributeSysReward := state.GetBalance(common.HexToAddress(systemcontracts.SystemRewardContract)).Cmp(maxSystemBalance) < 0
 	if doDistributeSysReward {
