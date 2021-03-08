@@ -55,6 +55,9 @@ type Context struct {
 	nextCallIndex   uint64
 	callIndexStack  *ExtendedStack
 
+	blockCumulativeGasUsed    uint64
+	blockLastTransactionIndex uint
+
 	seenBlock     *atomic.Bool
 	inBlock       *atomic.Bool
 	inTransaction *atomic.Bool
@@ -109,6 +112,9 @@ func (ctx *Context) StartBlock(block *types.Block) {
 }
 
 func (ctx *Context) FinalizeBlock(block *types.Block) {
+	ctx.blockCumulativeGasUsed = block.GasUsed()
+	ctx.blockLastTransactionIndex = uint(len(block.Transactions()) - 1)
+
 	// We must not check if the finalize block is actually in the a block since
 	// when deep mind block progress only is enabled, it would hit a panic
 	ctx.printer.Print("FINALIZE_BLOCK", Uint64(block.NumberU64()))
@@ -258,6 +264,14 @@ func (ctx *Context) EndTransaction(receipt *types.Receipt) {
 	ctx.activeCallIndex = "0"
 	ctx.callIndexStack = &ExtendedStack{}
 	ctx.callIndexStack.Push(ctx.activeCallIndex)
+}
+
+func (ctx *Context) CumulativeGasUsed() uint64 {
+	return ctx.blockCumulativeGasUsed
+}
+
+func (ctx *Context) LastTransactionIndex() uint {
+	return ctx.blockLastTransactionIndex
 }
 
 // Call methods

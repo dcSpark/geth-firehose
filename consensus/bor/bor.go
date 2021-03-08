@@ -1069,7 +1069,7 @@ func (c *Bor) fetchAndCommitSpan(
 	msg := getSystemMessage(common.HexToAddress(c.config.ValidatorContract), data)
 
 	// apply message
-	return applyMessage(msg, state, header, c.chainConfig, chain, dmContext)
+	return applyMessage(msg, state, header, c.chainConfig, chain, heimdallSpan.ID, dmContext)
 }
 
 // GetPendingStateProposals get pending state proposals
@@ -1269,15 +1269,36 @@ func applyMessage(
 	header *types.Header,
 	chainConfig *params.ChainConfig,
 	chainContext core.ChainContext,
+	spanId uint64,
 	dmContext *deepmind.Context,
 ) error {
+	var txHash common.Hash
+	if dmContext.Enabled() {
+		sha := sha3.NewLegacyKeccak256().(crypto.KeccakState)
+		sha.Reset()
+		rlp.Encode(sha, []interface{}{spanId, msg})
+		sha.Read(txHash[:])
+
+		dmContext.StartTransactionRaw(
+			txHash,
+			msg.To(),
+			msg.Value(),
+			new(big.Int).Bytes(), new(big.Int).Bytes(), new(big.Int).Bytes(),
+			msg.Gas(),
+			msg.GasPrice(),
+			msg.Nonce(),
+			msg.Data(),
+		)
+		dmContext.RecordTrxFrom(msg.From())
+	}
+
 	// Create a new context to be used in the EVM environment
 	context := core.NewEVMContext(msg, header, chainContext, &header.Coinbase)
 	// Create a new environment which holds all relevant information
 	// about the transaction and calling mechanisms.
 	vmenv := vm.NewEVM(context, state, chainConfig, vm.Config{}, dmContext)
 	// Apply the transaction to the current state (included in the env)
-	_, _, err := vmenv.Call(
+	_, leftOverGas, err := vmenv.Call(
 		vm.AccountRef(msg.From()),
 		*msg.To(),
 		msg.Data(),
@@ -1287,6 +1308,28 @@ func applyMessage(
 	// Update the state with pending changes
 	if err != nil {
 		state.Finalise(true)
+	}
+
+	if dmContext.Enabled() {
+		gasUsed := msg.Gas() - leftOverGas
+		cumulativeGasUsed := dmContext.CumulativeGasUsed() + gasUsed
+
+		//TODO: What to put in this Receipt
+		receipt := types.NewReceipt(nil, err != nil, cumulativeGasUsed)
+		receipt.TxHash = txHash
+		receipt.GasUsed = msg.Gas() - leftOverGas
+
+		// if the transaction created a contract, store the creation address in the receipt.
+		if msg.To() == nil {
+			receipt.ContractAddress = crypto.CreateAddress(vmenv.Context.Origin, spanId)
+		}
+		// Set the receipt logs and create a bloom for filtering
+		receipt.Logs = state.GetLogs(txHash)
+		receipt.Bloom = types.CreateBloom(types.Receipts{receipt})
+		receipt.BlockHash = header.Hash()
+		receipt.BlockNumber = header.Number
+		receipt.TransactionIndex = dmContext.LastTransactionIndex() + 1
+		dmContext.EndTransaction(receipt)
 	}
 
 	return nil

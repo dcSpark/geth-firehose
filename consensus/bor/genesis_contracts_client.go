@@ -70,7 +70,7 @@ func (gc *GenesisContractsClient) CommitState(
 	}
 	log.Info("→ committing new state", "eventRecord", event.String())
 	msg := getSystemMessage(common.HexToAddress(gc.StateReceiverContract), data)
-	if err := applyMessage(msg, state, header, gc.chainConfig, chCtx, dmContext); err != nil {
+	if err := applyMessage(msg, state, header, gc.chainConfig, chCtx, 0, dmContext); err != nil {
 		return err
 	}
 	return nil
