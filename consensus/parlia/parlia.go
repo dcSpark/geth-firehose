@@ -654,7 +654,7 @@ func (p *Parlia) Finalize(chain consensus.ChainReader, header *types.Header, sta
 		panic(err)
 	}
 	nextForkHash := forkid.NextForkHash(p.chainConfig, p.genesisHash, number)
-	if !snap.isMajorityFork(hex.EncodeToString(nextForkHash[:])) {
+	if number%10000 == 0 && !snap.isMajorityFork(hex.EncodeToString(nextForkHash[:])) {
 		log.Warn("there is a possible fork, and your client is not the majority. Please check...", "nextForkHash", hex.EncodeToString(nextForkHash[:]))
 	}
 	// If the block is a epoch end block, verify the validator list
