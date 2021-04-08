@@ -54,7 +54,7 @@ type Config struct {
 	// Name sets the instance name of the node. It must not contain the / character and is
 	// used in the devp2p node identifier. The instance name of geth is "geth". If no
 	// value is specified, the basename of the current executable is used.
-	Name string `toml:"-"`
+	Name string
 
 	// UserIdent, if set, is used as an additional component in the devp2p node identifier.
 	UserIdent string `toml:",omitempty"`
@@ -291,6 +291,7 @@ func (c *Config) name() string {
 		}
 		return progname
 	}
+
 	return c.Name
 }
 

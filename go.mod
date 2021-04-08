@@ -67,7 +67,7 @@ require (
 	github.com/tyler-smith/go-bip39 v1.1.0
 	github.com/wsddn/go-ecdh v0.0.0-20161211032359-48726bab9208
 	github.com/xsleonard/go-merkle v1.1.0
-	go.uber.org/atomic v1.5.1
+	go.uber.org/atomic v1.7.0
 	golang.org/x/crypto v0.0.0-20201203163018-be400aefbc4c
 	golang.org/x/net v0.0.0-20201207224615-747e23833adb // indirect
 	golang.org/x/sys v0.0.0-20201207223542-d4d67f95c62d
