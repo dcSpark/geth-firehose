@@ -86,10 +86,6 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 	// usually do have two tx, one for validator set contract, another for system reward contract.
 	systemTxs := make([]*types.Transaction, 0, 2)
 	for i, tx := range block.Transactions() {
-		if dmContext.Enabled() {
-			dmContext.StartTransaction(tx)
-		}
-
 		if isPoSA {
 			if isSystemTx, err := posa.IsSystemTransaction(tx, block.Header()); err != nil {
 				return nil, nil, 0, err
@@ -105,6 +101,7 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 		}
 
 		if dmContext.Enabled() {
+			dmContext.StartTransaction(tx)
 			dmContext.RecordTrxFrom(msg.From())
 		}
 
