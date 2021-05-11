@@ -204,7 +204,7 @@ func (p *peer) broadcastTransactions() {
 			done = nil
 
 		case <-fail:
-			return
+			p.Log().Trace("BroadcastTransactions failed")
 
 		case <-p.term:
 			return
@@ -266,7 +266,7 @@ func (p *peer) announceTransactions() {
 			done = nil
 
 		case <-fail:
-			return
+			p.Log().Trace("BroadcastTransactions failed")
 
 		case <-p.term:
 			return
