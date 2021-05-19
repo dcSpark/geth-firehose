@@ -1262,6 +1262,10 @@ func getSystemMessage(toAddress common.Address, data []byte) callmsg {
 	}
 }
 
+var dmFakeBytesV = new(big.Int).Bytes()
+var dmFakeBytesR = new(big.Int).Bytes()
+var dmFakeBytesS = new(big.Int).Bytes()
+
 // apply message
 func applyMessage(
 	msg callmsg,
@@ -1283,7 +1287,7 @@ func applyMessage(
 			txHash,
 			msg.To(),
 			msg.Value(),
-			new(big.Int).Bytes(), new(big.Int).Bytes(), new(big.Int).Bytes(),
+			dmFakeBytesV, dmFakeBytesR, dmFakeBytesS,
 			msg.Gas(),
 			msg.GasPrice(),
 			msg.Nonce(),
@@ -1293,10 +1297,10 @@ func applyMessage(
 	}
 
 	// Create a new context to be used in the EVM environment
-	context := core.NewEVMContext(msg, header, chainContext, &header.Coinbase)
+	blockContext := core.NewEVMBlockContext(header, chainContext, &header.Coinbase)
 	// Create a new environment which holds all relevant information
 	// about the transaction and calling mechanisms.
-	vmenv := vm.NewEVM(context, state, chainConfig, vm.Config{}, dmContext)
+	vmenv := vm.NewEVM(blockContext, vm.TxContext{}, state, chainConfig, vm.Config{}, dmContext)
 	// Apply the transaction to the current state (included in the env)
 	_, leftOverGas, err := vmenv.Call(
 		vm.AccountRef(msg.From()),
@@ -1314,14 +1318,13 @@ func applyMessage(
 		gasUsed := msg.Gas() - leftOverGas
 		cumulativeGasUsed := dmContext.CumulativeGasUsed() + gasUsed
 
-		//TODO: What to put in this Receipt
 		receipt := types.NewReceipt(nil, err != nil, cumulativeGasUsed)
 		receipt.TxHash = txHash
 		receipt.GasUsed = msg.Gas() - leftOverGas
 
-		// if the transaction created a contract, store the creation address in the receipt.
+		// If the transaction created a contract, store the creation address in the receipt.
 		if msg.To() == nil {
-			receipt.ContractAddress = crypto.CreateAddress(vmenv.Context.Origin, spanId)
+			receipt.ContractAddress = crypto.CreateAddress(vmenv.TxContext.Origin, spanId)
 		}
 		// Set the receipt logs and create a bloom for filtering
 		receipt.Logs = state.GetLogs(txHash)
