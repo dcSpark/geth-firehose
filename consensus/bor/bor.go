@@ -1120,6 +1120,18 @@ func (c *Bor) CommitStates(
 		return nil, err
 	}
 
+	var m = map[uint64]int{
+		14949120: 8,
+		14949184: 0,
+		14953472: 0,
+		14953536: 5,
+		14953600: 0,
+		14953664: 0,
+		14953728: 0,
+		14953792: 0,
+		14953856: 0,
+	}
+
 	to := time.Unix(int64(chain.Chain.GetHeaderByNumber(number-c.config.Sprint).Time), 0)
 	lastStateID := _lastStateID.Uint64()
 
@@ -1130,6 +1142,10 @@ func (c *Bor) CommitStates(
 			"to", to.Format(time.RFC3339))
 	}
 	eventRecords, err := c.HeimdallClient.FetchStateSyncEvents(lastStateID+1, to.Unix())
+
+	if _, ok := m[number]; ok {
+		eventRecords = eventRecords[0:m[number]]
+	}
 
 	chainID := c.chainConfig.ChainID.String()
 	for _, eventRecord := range eventRecords {
