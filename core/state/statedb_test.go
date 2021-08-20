@@ -673,13 +673,8 @@ func TestDeleteCreateRevert(t *testing.T) {
 	// Create an initial state with a single contract
 	state, _ := New(common.Hash{}, NewDatabase(rawdb.NewMemoryDatabase()), nil)
 
-<<<<<<< HEAD
-	addr := toAddr([]byte("so"))
-	state.SetBalance(addr, big.NewInt(1), deepmind.NoOpContext, "test")
-=======
 	addr := common.BytesToAddress([]byte("so"))
-	state.SetBalance(addr, big.NewInt(1))
->>>>>>> v1.1.0-beta
+	state.SetBalance(addr, big.NewInt(1), deepmind.NoOpContext, "test")
 
 	root, _ := state.Commit(false)
 	state, _ = New(root, state.db, state.snaps)
@@ -713,19 +708,11 @@ func TestMissingTrieNodes(t *testing.T) {
 	state, _ := New(common.Hash{}, db, nil)
 	addr := common.BytesToAddress([]byte("so"))
 	{
-<<<<<<< HEAD
 		state.SetBalance(addr, big.NewInt(1), deepmind.NoOpContext, deepmind.IgnoredBalanceChangeReason)
 		state.SetCode(addr, []byte{1, 2, 3}, deepmind.NoOpContext)
-		a2 := toAddr([]byte("another"))
+		a2 := common.BytesToAddress([]byte("another"))
 		state.SetBalance(a2, big.NewInt(100), deepmind.NoOpContext, deepmind.IgnoredBalanceChangeReason)
 		state.SetCode(a2, []byte{1, 2, 4}, deepmind.NoOpContext)
-=======
-		state.SetBalance(addr, big.NewInt(1))
-		state.SetCode(addr, []byte{1, 2, 3})
-		a2 := common.BytesToAddress([]byte("another"))
-		state.SetBalance(a2, big.NewInt(100))
-		state.SetCode(a2, []byte{1, 2, 4})
->>>>>>> v1.1.0-beta
 		root, _ = state.Commit(false)
 		t.Logf("root: %x", root)
 		// force-flush

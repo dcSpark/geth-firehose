@@ -19,6 +19,7 @@ package vm
 import (
 	"errors"
 	"math/big"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -32,6 +33,12 @@ import (
 // emptyCodeHash is used by create to ensure deployment is disallowed to already
 // deployed contract addresses (relevant after the account abstraction).
 var emptyCodeHash = crypto.Keccak256Hash(nil)
+
+var EvmPool = sync.Pool{
+	New: func() interface{} {
+		return &EVM{}
+	},
+}
 
 type (
 	// CanTransferFunc is the signature of a transfer guard function
@@ -151,16 +158,18 @@ func (evm *EVM) DeepmindContext() *deepmind.Context {
 // NewEVM returns a new EVM. The returned EVM is not thread safe and should
 // only ever be used *once*.
 func NewEVM(blockCtx BlockContext, txCtx TxContext, statedb StateDB, chainConfig *params.ChainConfig, vmConfig Config, dmContext *deepmind.Context) *EVM {
-	evm := &EVM{
-		Context:      blockCtx,
-		TxContext:    txCtx,
-		StateDB:      statedb,
-		vmConfig:     vmConfig,
-		chainConfig:  chainConfig,
-		chainRules:   chainConfig.Rules(blockCtx.BlockNumber),
-		interpreters: make([]Interpreter, 0, 1),
-		dmContext:    dmContext,
-	}
+	evm := EvmPool.Get().(*EVM)
+	evm.Context = blockCtx
+	evm.TxContext = txCtx
+	evm.StateDB = statedb
+	evm.vmConfig = vmConfig
+	evm.chainConfig = chainConfig
+	evm.chainRules = chainConfig.Rules(blockCtx.BlockNumber)
+	evm.interpreters = make([]Interpreter, 0, 1)
+	evm.abort = 0
+	evm.callGasTemp = 0
+	evm.depth = 0
+	evm.dmContext = dmContext
 
 	if chainConfig.IsEWASM(blockCtx.BlockNumber) {
 		// to be implemented by EVM-C and Wagon PRs.

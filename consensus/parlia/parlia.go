@@ -22,6 +22,7 @@ import (
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/gopool"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/consensus/misc"
@@ -302,7 +303,7 @@ func (p *Parlia) VerifyHeaders(chain consensus.ChainHeaderReader, headers []*typ
 	abort := make(chan struct{})
 	results := make(chan error, len(headers))
 
-	go func() {
+	gopool.Submit(func() {
 		for i, header := range headers {
 			err := p.verifyHeader(chain, header, headers[:i])
 
@@ -312,7 +313,7 @@ func (p *Parlia) VerifyHeaders(chain consensus.ChainHeaderReader, headers []*typ
 			case results <- err:
 			}
 		}
-	}()
+	})
 	return abort, results
 }
 
@@ -652,7 +653,7 @@ func (p *Parlia) Finalize(chain consensus.ChainHeaderReader, header *types.Heade
 	number := header.Number.Uint64()
 	snap, err := p.snapshot(chain, number-1, header.ParentHash, nil)
 	if err != nil {
-		panic(err)
+		return err
 	}
 	nextForkHash := forkid.NextForkHash(p.chainConfig, p.genesisHash, number)
 	if number%10000 == 0 && !snap.isMajorityFork(hex.EncodeToString(nextForkHash[:])) {
@@ -706,13 +707,11 @@ func (p *Parlia) Finalize(chain consensus.ChainHeaderReader, header *types.Heade
 	val := header.Coinbase
 	err = p.distributeIncoming(val, state, header, cx, txs, receipts, systemTxs, usedGas, false, dmContext)
 	if err != nil {
-		panic(err)
+		return err
 	}
 	if len(*systemTxs) > 0 {
 		return errors.New("the length of systemTxs do not match")
 	}
-	header.Root = state.IntermediateRoot(chain.Config().IsEIP158(header.Number))
-	header.UncleHash = types.CalcUncleHash(nil)
 	return nil
 }
 
@@ -738,7 +737,7 @@ func (p *Parlia) FinalizeAndAssemble(chain consensus.ChainHeaderReader, header *
 		number := header.Number.Uint64()
 		snap, err := p.snapshot(chain, number-1, header.ParentHash, nil)
 		if err != nil {
-			panic(err)
+			return nil, nil, err
 		}
 		spoiledVal := snap.supposeValidator()
 		signedRecently := false
@@ -758,17 +757,29 @@ func (p *Parlia) FinalizeAndAssemble(chain consensus.ChainHeaderReader, header *
 	}
 	err := p.distributeIncoming(p.val, state, header, cx, &txs, &receipts, nil, &header.GasUsed, true, dmContext)
 	if err != nil {
-		panic(err)
+		return nil, nil, err
 	}
 	// should not happen. Once happen, stop the node is better than broadcast the block
 	if header.GasLimit < header.GasUsed {
-		panic("Gas consumption of system txs exceed the gas limit")
+		return nil, nil, errors.New("gas consumption of system txs exceed the gas limit")
 	}
-	header.Root = state.IntermediateRoot(chain.Config().IsEIP158(header.Number))
 	header.UncleHash = types.CalcUncleHash(nil)
-
+	var blk *types.Block
+	var rootHash common.Hash
+	wg := sync.WaitGroup{}
+	wg.Add(2)
+	go func() {
+		rootHash = state.IntermediateRoot(chain.Config().IsEIP158(header.Number))
+		wg.Done()
+	}()
+	go func() {
+		blk = types.NewBlock(header, txs, nil, receipts, trie.NewStackTrie(nil))
+		wg.Done()
+	}()
+	wg.Wait()
+	blk.SetRoot(rootHash)
 	// Assemble and return the final block for sealing
-	return types.NewBlock(header, txs, nil, receipts, trie.NewStackTrie(nil)), receipts, nil
+	return blk, receipts, nil
 }
 
 // Authorize injects a private key into the consensus engine to mint new blocks
@@ -869,7 +880,35 @@ func (p *Parlia) EnoughDistance(chain consensus.ChainReader, header *types.Heade
 	if err != nil {
 		return true
 	}
-	return snap.enoughDistance(p.val)
+	return snap.enoughDistance(p.val, header)
+}
+
+func (p *Parlia) IsLocalBlock(header *types.Header) bool {
+	return p.val == header.Coinbase
+}
+
+func (p *Parlia) SignRecently(chain consensus.ChainReader, parent *types.Header) (bool, error) {
+	snap, err := p.snapshot(chain, parent.Number.Uint64(), parent.ParentHash, nil)
+	if err != nil {
+		return true, err
+	}
+
+	// Bail out if we're unauthorized to sign a block
+	if _, authorized := snap.Validators[p.val]; !authorized {
+		return true, errUnauthorizedValidator
+	}
+
+	// If we're amongst the recent signers, wait for the next block
+	number := parent.Number.Uint64() + 1
+	for seen, recent := range snap.Recents {
+		if recent == p.val {
+			// Signer is among recents, only wait if the current block doesn't shift it out
+			if limit := uint64(len(snap.Validators)/2 + 1); number < limit || seen > number-limit {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
 }
 
 // CalcDifficulty is the difficulty adjustment algorithm. It returns the difficulty
@@ -1108,7 +1147,14 @@ func (p *Parlia) applyTransaction(
 		}
 		actualTx := (*receivedTxs)[0]
 		if !bytes.Equal(p.signer.Hash(actualTx).Bytes(), expectedHash.Bytes()) {
-			return fmt.Errorf("expected tx hash %v, get %v", expectedHash.String(), actualTx.Hash().String())
+			return fmt.Errorf("expected tx hash %v, get %v, nonce %d, to %s, value %s, gas %d, gasPrice %s, data %s", expectedHash.String(), actualTx.Hash().String(),
+				expectedTx.Nonce(),
+				expectedTx.To().String(),
+				expectedTx.Value().String(),
+				expectedTx.Gas(),
+				expectedTx.GasPrice().String(),
+				hex.EncodeToString(expectedTx.Data()),
+			)
 		}
 		expectedTx = actualTx
 		// move to next

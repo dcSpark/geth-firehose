@@ -57,13 +57,13 @@ func (s Storage) Copy() Storage {
 	return cpy
 }
 
-// stateObject represents an Ethereum account which is being modified.
+// StateObject represents an Ethereum account which is being modified.
 //
 // The usage pattern is as follows:
 // First you need to obtain a state object.
 // Account values can be accessed and modified through the object.
 // Finally, call CommitTrie to write the modified storage trie into a database.
-type stateObject struct {
+type StateObject struct {
 	address  common.Address
 	addrHash common.Hash // hash of ethereum address of the account
 	data     Account
@@ -91,10 +91,13 @@ type stateObject struct {
 	dirtyCode bool // true if the code was updated
 	suicided  bool
 	deleted   bool
+
+	//encode
+	encodeData []byte
 }
 
 // empty returns whether the account is considered empty.
-func (s *stateObject) empty() bool {
+func (s *StateObject) empty() bool {
 	return s.data.Nonce == 0 && s.data.Balance.Sign() == 0 && bytes.Equal(s.data.CodeHash, emptyCodeHash)
 }
 
@@ -108,7 +111,7 @@ type Account struct {
 }
 
 // newObject creates a state object.
-func newObject(db *StateDB, address common.Address, data Account) *stateObject {
+func newObject(db *StateDB, address common.Address, data Account) *StateObject {
 	if data.Balance == nil {
 		data.Balance = new(big.Int)
 	}
@@ -118,7 +121,7 @@ func newObject(db *StateDB, address common.Address, data Account) *stateObject {
 	if data.Root == (common.Hash{}) {
 		data.Root = emptyRoot
 	}
-	return &stateObject{
+	return &StateObject{
 		db:             db,
 		address:        address,
 		addrHash:       crypto.Keccak256Hash(address[:]),
@@ -130,22 +133,22 @@ func newObject(db *StateDB, address common.Address, data Account) *stateObject {
 }
 
 // EncodeRLP implements rlp.Encoder.
-func (s *stateObject) EncodeRLP(w io.Writer) error {
+func (s *StateObject) EncodeRLP(w io.Writer) error {
 	return rlp.Encode(w, s.data)
 }
 
 // setError remembers the first non-nil error it is called with.
-func (s *stateObject) setError(err error) {
+func (s *StateObject) setError(err error) {
 	if s.dbErr == nil {
 		s.dbErr = err
 	}
 }
 
-func (s *stateObject) markSuicided() {
+func (s *StateObject) markSuicided() {
 	s.suicided = true
 }
 
-func (s *stateObject) touch() {
+func (s *StateObject) touch() {
 	s.db.journal.append(touchChange{
 		account: &s.address,
 	})
@@ -156,7 +159,7 @@ func (s *stateObject) touch() {
 	}
 }
 
-func (s *stateObject) getTrie(db Database) Trie {
+func (s *StateObject) getTrie(db Database) Trie {
 	if s.trie == nil {
 		// Try fetching from prefetcher first
 		// We don't prefetch empty tries
@@ -178,7 +181,7 @@ func (s *stateObject) getTrie(db Database) Trie {
 }
 
 // GetState retrieves a value from the account storage trie.
-func (s *stateObject) GetState(db Database, key common.Hash) common.Hash {
+func (s *StateObject) GetState(db Database, key common.Hash) common.Hash {
 	// If the fake storage is set, only lookup the state here(in the debugging mode)
 	if s.fakeStorage != nil {
 		return s.fakeStorage[key]
@@ -193,7 +196,7 @@ func (s *stateObject) GetState(db Database, key common.Hash) common.Hash {
 }
 
 // GetCommittedState retrieves a value from the committed account storage trie.
-func (s *stateObject) GetCommittedState(db Database, key common.Hash) common.Hash {
+func (s *StateObject) GetCommittedState(db Database, key common.Hash) common.Hash {
 	// If the fake storage is set, only lookup the state here(in the debugging mode)
 	if s.fakeStorage != nil {
 		return s.fakeStorage[key]
@@ -266,7 +269,7 @@ func (s *stateObject) GetCommittedState(db Database, key common.Hash) common.Has
 }
 
 // SetState updates a value in account storage.
-func (s *stateObject) SetState(db Database, key, value common.Hash, dmContext *deepmind.Context) {
+func (s *StateObject) SetState(db Database, key, value common.Hash, dmContext *deepmind.Context) {
 	// If the fake storage is set, put the temporary state update here.
 	if s.fakeStorage != nil {
 		s.fakeStorage[key] = value
@@ -297,7 +300,7 @@ func (s *stateObject) SetState(db Database, key, value common.Hash, dmContext *d
 // lookup only happens in the fake state storage.
 //
 // Note this function should only be used for debugging purpose.
-func (s *stateObject) SetStorage(storage map[common.Hash]common.Hash) {
+func (s *StateObject) SetStorage(storage map[common.Hash]common.Hash) {
 	// Allocate fake storage if it's nil.
 	if s.fakeStorage == nil {
 		s.fakeStorage = make(Storage)
@@ -309,13 +312,13 @@ func (s *stateObject) SetStorage(storage map[common.Hash]common.Hash) {
 	// debugging and the `fake` storage won't be committed to database.
 }
 
-func (s *stateObject) setState(key, value common.Hash) {
+func (s *StateObject) setState(key, value common.Hash) {
 	s.dirtyStorage[key] = value
 }
 
 // finalise moves all dirty storage slots into the pending area to be hashed or
 // committed later. It is invoked at the end of every transaction.
-func (s *stateObject) finalise(prefetch bool) {
+func (s *StateObject) finalise(prefetch bool) {
 	slotsToPrefetch := make([][]byte, 0, len(s.dirtyStorage))
 	for key, value := range s.dirtyStorage {
 		s.pendingStorage[key] = value
@@ -324,7 +327,7 @@ func (s *stateObject) finalise(prefetch bool) {
 		}
 	}
 	if s.db.prefetcher != nil && prefetch && len(slotsToPrefetch) > 0 && s.data.Root != emptyRoot {
-		s.db.prefetcher.prefetch(s.data.Root, slotsToPrefetch)
+		s.db.prefetcher.prefetch(s.data.Root, slotsToPrefetch, s.addrHash)
 	}
 	if len(s.dirtyStorage) > 0 {
 		s.dirtyStorage = make(Storage)
@@ -333,7 +336,7 @@ func (s *stateObject) finalise(prefetch bool) {
 
 // updateTrie writes cached storage modifications into the object's storage trie.
 // It will return nil if the trie has not been loaded and no changes have been made
-func (s *stateObject) updateTrie(db Database) Trie {
+func (s *StateObject) updateTrie(db Database) Trie {
 	// Make sure all dirty slots are finalized into the pending storage area
 	s.finalise(false) // Don't prefetch any more, pull directly if need be
 	if len(s.pendingStorage) == 0 {
@@ -341,7 +344,11 @@ func (s *stateObject) updateTrie(db Database) Trie {
 	}
 	// Track the amount of time wasted on updating the storage trie
 	if metrics.EnabledExpensive {
-		defer func(start time.Time) { s.db.StorageUpdates += time.Since(start) }(time.Now())
+		defer func(start time.Time) {
+			s.db.MetricsMux.Lock()
+			s.db.StorageUpdates += time.Since(start)
+			s.db.MetricsMux.Unlock()
+		}(time.Now())
 	}
 	// The snapshot storage map for the object
 	var storage map[common.Hash][]byte
@@ -367,6 +374,7 @@ func (s *stateObject) updateTrie(db Database) Trie {
 		}
 		// If state snapshotting is active, cache the data til commit
 		if s.db.snap != nil {
+			s.db.snapMux.Lock()
 			if storage == nil {
 				// Retrieve the old storage map, if available, create a new one otherwise
 				if storage = s.db.snapStorage[s.addrHash]; storage == nil {
@@ -375,6 +383,7 @@ func (s *stateObject) updateTrie(db Database) Trie {
 				}
 			}
 			storage[crypto.HashData(hasher, key[:])] = v // v will be nil if value is 0x00
+			s.db.snapMux.Unlock()
 		}
 		usedStorage = append(usedStorage, common.CopyBytes(key[:])) // Copy needed for closure
 	}
@@ -388,23 +397,30 @@ func (s *stateObject) updateTrie(db Database) Trie {
 }
 
 // UpdateRoot sets the trie root to the current root hash of
-func (s *stateObject) updateRoot(db Database) {
+func (s *StateObject) updateRoot(db Database) {
 	// If nothing changed, don't bother with hashing anything
 	if s.updateTrie(db) == nil {
 		return
 	}
 	// Track the amount of time wasted on hashing the storage trie
 	if metrics.EnabledExpensive {
-		defer func(start time.Time) { s.db.StorageHashes += time.Since(start) }(time.Now())
+		defer func(start time.Time) {
+			s.db.MetricsMux.Lock()
+			s.db.StorageHashes += time.Since(start)
+			s.db.MetricsMux.Unlock()
+		}(time.Now())
 	}
 	s.data.Root = s.trie.Hash()
 }
 
 // CommitTrie the storage trie of the object to db.
 // This updates the trie root.
-func (s *stateObject) CommitTrie(db Database) error {
+func (s *StateObject) CommitTrie(db Database) error {
 	// If nothing changed, don't bother with hashing anything
 	if s.updateTrie(db) == nil {
+		if s.trie != nil && s.data.Root != emptyRoot {
+			db.CacheStorage(s.addrHash, s.data.Root, s.trie)
+		}
 		return nil
 	}
 	if s.dbErr != nil {
@@ -418,13 +434,15 @@ func (s *stateObject) CommitTrie(db Database) error {
 	if err == nil {
 		s.data.Root = root
 	}
-
+	if s.data.Root != emptyRoot {
+		db.CacheStorage(s.addrHash, s.data.Root, s.trie)
+	}
 	return err
 }
 
 // AddBalance adds amount to s's balance.
 // It is used to add funds to the destination account of a transfer.
-func (s *stateObject) AddBalance(amount *big.Int, dmContext *deepmind.Context, reason deepmind.BalanceChangeReason) {
+func (s *StateObject) AddBalance(amount *big.Int, dmContext *deepmind.Context, reason deepmind.BalanceChangeReason) {
 	// EIP161: We must check emptiness for the objects such that the account
 	// clearing (0,0,0 objects) can take effect.
 	if amount.Sign() == 0 {
@@ -438,14 +456,14 @@ func (s *stateObject) AddBalance(amount *big.Int, dmContext *deepmind.Context, r
 
 // SubBalance removes amount from s's balance.
 // It is used to remove funds from the origin account of a transfer.
-func (s *stateObject) SubBalance(amount *big.Int, dmContext *deepmind.Context, reason deepmind.BalanceChangeReason) {
+func (s *StateObject) SubBalance(amount *big.Int, dmContext *deepmind.Context, reason deepmind.BalanceChangeReason) {
 	if amount.Sign() == 0 {
 		return
 	}
 	s.SetBalance(new(big.Int).Sub(s.Balance(), amount), dmContext, reason)
 }
 
-func (s *stateObject) SetBalance(amount *big.Int, dmContext *deepmind.Context, reason deepmind.BalanceChangeReason) {
+func (s *StateObject) SetBalance(amount *big.Int, dmContext *deepmind.Context, reason deepmind.BalanceChangeReason) {
 	if dmContext.Enabled() {
 		dmContext.RecordBalanceChange(s.address, s.data.Balance, amount, reason)
 	}
@@ -457,14 +475,14 @@ func (s *stateObject) SetBalance(amount *big.Int, dmContext *deepmind.Context, r
 	s.setBalance(amount)
 }
 
-func (s *stateObject) setBalance(amount *big.Int) {
+func (s *StateObject) setBalance(amount *big.Int) {
 	s.data.Balance = amount
 }
 
 // Return the gas back to the origin. Used by the Virtual machine or Closures
-func (s *stateObject) ReturnGas(gas *big.Int) {}
+func (s *StateObject) ReturnGas(gas *big.Int) {}
 
-func (s *stateObject) deepCopy(db *StateDB) *stateObject {
+func (s *StateObject) deepCopy(db *StateDB) *StateObject {
 	stateObject := newObject(db, s.address, s.data)
 	if s.trie != nil {
 		stateObject.trie = db.db.CopyTrie(s.trie)
@@ -484,12 +502,12 @@ func (s *stateObject) deepCopy(db *StateDB) *stateObject {
 //
 
 // Returns the address of the contract/account
-func (s *stateObject) Address() common.Address {
+func (s *StateObject) Address() common.Address {
 	return s.address
 }
 
 // Code returns the contract code associated with this object, if any.
-func (s *stateObject) Code(db Database) []byte {
+func (s *StateObject) Code(db Database) []byte {
 	if s.code != nil {
 		return s.code
 	}
@@ -507,7 +525,7 @@ func (s *stateObject) Code(db Database) []byte {
 // CodeSize returns the size of the contract code associated with this object,
 // or zero if none. This method is an almost mirror of Code, but uses a cache
 // inside the database to avoid loading codes seen recently.
-func (s *stateObject) CodeSize(db Database) int {
+func (s *StateObject) CodeSize(db Database) int {
 	if s.code != nil {
 		return len(s.code)
 	}
@@ -521,7 +539,7 @@ func (s *stateObject) CodeSize(db Database) int {
 	return size
 }
 
-func (s *stateObject) SetCode(codeHash common.Hash, code []byte, dmContext *deepmind.Context) {
+func (s *StateObject) SetCode(codeHash common.Hash, code []byte, dmContext *deepmind.Context) {
 	prevcode := s.Code(s.db.db)
 
 	if dmContext.Enabled() {
@@ -536,13 +554,13 @@ func (s *stateObject) SetCode(codeHash common.Hash, code []byte, dmContext *deep
 	s.setCode(codeHash, code)
 }
 
-func (s *stateObject) setCode(codeHash common.Hash, code []byte) {
+func (s *StateObject) setCode(codeHash common.Hash, code []byte) {
 	s.code = code
 	s.data.CodeHash = codeHash[:]
 	s.dirtyCode = true
 }
 
-func (s *stateObject) SetNonce(nonce uint64, dmContext *deepmind.Context) {
+func (s *StateObject) SetNonce(nonce uint64, dmContext *deepmind.Context) {
 	if dmContext.Enabled() {
 		dmContext.RecordNonceChange(s.address, s.data.Nonce, nonce)
 	}
@@ -554,25 +572,25 @@ func (s *stateObject) SetNonce(nonce uint64, dmContext *deepmind.Context) {
 	s.setNonce(nonce)
 }
 
-func (s *stateObject) setNonce(nonce uint64) {
+func (s *StateObject) setNonce(nonce uint64) {
 	s.data.Nonce = nonce
 }
 
-func (s *stateObject) CodeHash() []byte {
+func (s *StateObject) CodeHash() []byte {
 	return s.data.CodeHash
 }
 
-func (s *stateObject) Balance() *big.Int {
+func (s *StateObject) Balance() *big.Int {
 	return s.data.Balance
 }
 
-func (s *stateObject) Nonce() uint64 {
+func (s *StateObject) Nonce() uint64 {
 	return s.data.Nonce
 }
 
-// Never called, but must be present to allow stateObject to be used
+// Never called, but must be present to allow StateObject to be used
 // as a vm.Account interface that also satisfies the vm.ContractRef
 // interface. Interfaces are awesome.
-func (s *stateObject) Value() *big.Int {
-	panic("Value on stateObject should never be called")
+func (s *StateObject) Value() *big.Int {
+	panic("Value on StateObject should never be called")
 }
