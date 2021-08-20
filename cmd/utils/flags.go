@@ -1274,6 +1274,12 @@ func SetNodeConfig(ctx *cli.Context, cfg *node.Config) {
 	if ctx.GlobalIsSet(RangeLimitFlag.Name) {
 		cfg.RangeLimit = ctx.GlobalBool(RangeLimitFlag.Name)
 	}
+	if ctx.GlobalIsSet(DirectBroadcastFlag.Name) {
+		cfg.DirectBroadcast = ctx.GlobalBool(DirectBroadcastFlag.Name)
+	}
+	if ctx.GlobalIsSet(RangeLimitFlag.Name) {
+		cfg.RangeLimit = ctx.GlobalBool(RangeLimitFlag.Name)
+	}
 	if ctx.GlobalIsSet(InsecureUnlockAllowedFlag.Name) {
 		cfg.InsecureUnlockAllowed = ctx.GlobalBool(InsecureUnlockAllowedFlag.Name)
 	}
@@ -1433,6 +1439,9 @@ func setMiner(ctx *cli.Context, cfg *miner.Config) {
 	}
 	if ctx.GlobalIsSet(MinerRecommitIntervalFlag.Name) {
 		cfg.Recommit = ctx.GlobalDuration(MinerRecommitIntervalFlag.Name)
+	}
+	if ctx.GlobalIsSet(MinerDelayLeftoverFlag.Name) {
+		cfg.DelayLeftOver = ctx.Duration(MinerDelayLeftoverFlag.Name)
 	}
 	if ctx.GlobalIsSet(MinerDelayLeftoverFlag.Name) {
 		cfg.DelayLeftOver = ctx.Duration(MinerDelayLeftoverFlag.Name)
