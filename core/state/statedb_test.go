@@ -127,7 +127,7 @@ func TestIntermediateLeaks(t *testing.T) {
 			t.Errorf("entry missing from the transition database: %x -> %x", key, fvalue)
 		}
 		if !bytes.Equal(fvalue, tvalue) {
-			t.Errorf("the value associate key %x is mismatch,: %x in transition database ,%x in final database", key, tvalue, fvalue)
+			t.Errorf("value mismatch at key %x: %x in transition database, %x in final database", key, tvalue, fvalue)
 		}
 	}
 	it.Release()
@@ -140,7 +140,7 @@ func TestIntermediateLeaks(t *testing.T) {
 			t.Errorf("extra entry in the transition database: %x -> %x", key, it.Value())
 		}
 		if !bytes.Equal(fvalue, tvalue) {
-			t.Errorf("the value associate key %x is mismatch,: %x in transition database ,%x in final database", key, tvalue, fvalue)
+			t.Errorf("value mismatch at key %x: %x in transition database, %x in final database", key, tvalue, fvalue)
 		}
 	}
 }
@@ -464,9 +464,9 @@ func (test *snapshotTest) checkEqual(state, checkstate *StateDB) error {
 		return fmt.Errorf("got GetRefund() == %d, want GetRefund() == %d",
 			state.GetRefund(), checkstate.GetRefund())
 	}
-	if !reflect.DeepEqual(state.GetLogs(common.Hash{}), checkstate.GetLogs(common.Hash{})) {
+	if !reflect.DeepEqual(state.GetLogs(common.Hash{}, common.Hash{}), checkstate.GetLogs(common.Hash{}, common.Hash{})) {
 		return fmt.Errorf("got GetLogs(common.Hash{}) == %v, want GetLogs(common.Hash{}) == %v",
-			state.GetLogs(common.Hash{}), checkstate.GetLogs(common.Hash{}))
+			state.GetLogs(common.Hash{}, common.Hash{}), checkstate.GetLogs(common.Hash{}, common.Hash{}))
 	}
 	return nil
 }
@@ -673,7 +673,7 @@ func TestDeleteCreateRevert(t *testing.T) {
 	// Create an initial state with a single contract
 	state, _ := New(common.Hash{}, NewDatabase(rawdb.NewMemoryDatabase()), nil)
 
-	addr := toAddr([]byte("so"))
+	addr := common.BytesToAddress([]byte("so"))
 	state.SetBalance(addr, big.NewInt(1), deepmind.NoOpContext, "test")
 
 	root, _ := state.Commit(false)
@@ -706,11 +706,11 @@ func TestMissingTrieNodes(t *testing.T) {
 	db := NewDatabase(memDb)
 	var root common.Hash
 	state, _ := New(common.Hash{}, db, nil)
-	addr := toAddr([]byte("so"))
+	addr := common.BytesToAddress([]byte("so"))
 	{
 		state.SetBalance(addr, big.NewInt(1), deepmind.NoOpContext, "test")
 		state.SetCode(addr, []byte{1, 2, 3}, deepmind.NoOpContext)
-		a2 := toAddr([]byte("another"))
+		a2 := common.BytesToAddress([]byte("another"))
 		state.SetBalance(a2, big.NewInt(100), deepmind.NoOpContext, "test")
 		state.SetCode(a2, []byte{1, 2, 4}, deepmind.NoOpContext)
 		root, _ = state.Commit(false)

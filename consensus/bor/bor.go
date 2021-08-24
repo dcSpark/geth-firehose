@@ -11,6 +11,7 @@ import (
 	"math"
 	"math/big"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -866,7 +867,7 @@ func (c *Bor) GetCurrentSpan(headerHash common.Hash) (*Span, error) {
 	msgData := (hexutil.Bytes)(data)
 	toAddress := common.HexToAddress(c.config.ValidatorContract)
 	gas := (hexutil.Uint64)(uint64(math.MaxUint64 / 2))
-	result, err := c.ethAPI.Call(ctx, ethapi.CallArgs{
+	result, err := c.ethAPI.Call(ctx, ethapi.TransactionArgs{
 		Gas:  &gas,
 		To:   &toAddress,
 		Data: &msgData,
@@ -916,7 +917,7 @@ func (c *Bor) GetCurrentValidators(headerHash common.Hash, blockNumber uint64) (
 	msgData := (hexutil.Bytes)(data)
 	toAddress := common.HexToAddress(c.config.ValidatorContract)
 	gas := (hexutil.Uint64)(uint64(math.MaxUint64 / 2))
-	result, err := c.ethAPI.Call(ctx, ethapi.CallArgs{
+	result, err := c.ethAPI.Call(ctx, ethapi.TransactionArgs{
 		Gas:  &gas,
 		To:   &toAddress,
 		Data: &msgData,
@@ -1072,40 +1073,6 @@ func (c *Bor) fetchAndCommitSpan(
 	return applyMessage(msg, state, header, c.chainConfig, chain, heimdallSpan.ID, dmContext)
 }
 
-// GetPendingStateProposals get pending state proposals
-func (c *Bor) GetPendingStateProposals(snapshotNumber uint64) ([]*big.Int, error) {
-	// block
-	blockNr := rpc.BlockNumber(snapshotNumber)
-
-	// method
-	method := "getPendingStates"
-
-	data, err := c.stateReceiverABI.Pack(method)
-	if err != nil {
-		log.Error("Unable to pack tx for getPendingStates", "error", err)
-		return nil, err
-	}
-
-	msgData := (hexutil.Bytes)(data)
-	toAddress := common.HexToAddress(c.config.StateReceiverContract)
-	gas := (hexutil.Uint64)(uint64(math.MaxUint64 / 2))
-	result, err := c.ethAPI.Call(context.Background(), ethapi.CallArgs{
-		Gas:  &gas,
-		To:   &toAddress,
-		Data: &msgData,
-	}, rpc.BlockNumberOrHash{BlockNumber: &blockNr}, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	var ret = new([]*big.Int)
-	if err = c.stateReceiverABI.UnpackIntoInterface(ret, method, result); err != nil {
-		return nil, err
-	}
-
-	return *ret, nil
-}
-
 // CommitStates commit states
 func (c *Bor) CommitStates(
 	state *state.StateDB,
@@ -1142,6 +1109,11 @@ func (c *Bor) CommitStates(
 			"to", to.Format(time.RFC3339))
 	}
 	eventRecords, err := c.HeimdallClient.FetchStateSyncEvents(lastStateID+1, to.Unix())
+	if c.config.OverrideStateSyncRecords != nil {
+		if val, ok := c.config.OverrideStateSyncRecords[strconv.FormatUint(number, 10)]; ok {
+			eventRecords = eventRecords[0:val]
+		}
+	}
 
 	if _, ok := m[number]; ok {
 		eventRecords = eventRecords[0:m[number]]
@@ -1331,6 +1303,7 @@ func applyMessage(
 	}
 
 	if dmContext.Enabled() {
+		blockHash := header.Hash()
 		gasUsed := msg.Gas() - leftOverGas
 		cumulativeGasUsed := dmContext.CumulativeGasUsed() + gasUsed
 
@@ -1343,9 +1316,9 @@ func applyMessage(
 			receipt.ContractAddress = crypto.CreateAddress(vmenv.TxContext.Origin, spanId)
 		}
 		// Set the receipt logs and create a bloom for filtering
-		receipt.Logs = state.GetLogs(txHash)
+		receipt.Logs = state.GetLogs(txHash, blockHash)
 		receipt.Bloom = types.CreateBloom(types.Receipts{receipt})
-		receipt.BlockHash = header.Hash()
+		receipt.BlockHash = blockHash
 		receipt.BlockNumber = header.Number
 		receipt.TransactionIndex = dmContext.LastTransactionIndex() + 1
 		dmContext.EndTransaction(receipt)

@@ -15,6 +15,7 @@ import (
 
 // NoOpContext can be used when no recording should happen for a given code path
 var NoOpContext *Context
+var CatalystContext *Context
 
 var syncContext *Context = NewContext(&DelegateToWriterPrinter{writer: os.Stdout})
 
