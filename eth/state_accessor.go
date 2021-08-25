@@ -19,14 +19,16 @@ package eth
 import (
 	"errors"
 	"fmt"
-	"github.com/ethereum/go-ethereum/deepmind"
+	"math/big"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
+	"github.com/ethereum/go-ethereum/deepmind"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/trie"
 )
@@ -171,6 +173,14 @@ func (eth *Ethereum) stateAtTransaction(block *types.Block, txIndex int, reexec 
 		}
 		// Not yet the searched for transaction, execute on top of the current state
 		vmenv := vm.NewEVM(context, txContext, statedb, eth.blockchain.Config(), vm.Config{}, dmContext)
+		if posa, ok := eth.Engine().(consensus.PoSA); ok && msg.From() == context.Coinbase &&
+			posa.IsSystemContract(msg.To()) && msg.GasPrice().Cmp(big.NewInt(0)) == 0 {
+			balance := statedb.GetBalance(consensus.SystemAddress)
+			if balance.Cmp(common.Big0) > 0 {
+				statedb.SetBalance(consensus.SystemAddress, big.NewInt(0), dmContext, deepmind.BalanceChangeReason("reward_transfaction_fee"))
+				statedb.AddBalance(context.Coinbase, balance, false, dmContext, deepmind.BalanceChangeReason("reward_transfaction_fee"))
+			}
+		}
 		statedb.Prepare(tx.Hash(), block.Hash(), idx)
 		if _, err := core.ApplyMessage(vmenv, msg, new(core.GasPool).AddGas(tx.Gas())); err != nil {
 			return nil, vm.BlockContext{}, nil, fmt.Errorf("transaction %#x failed: %v", tx.Hash(), err)
