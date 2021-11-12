@@ -508,8 +508,7 @@ func (ctx *Context) RecordTrxPool(eventType string, tx *types.Transaction, err e
 		return
 	}
 
-
-	signer := types.NewEIP155Signer(tx.ChainId())
+	signer := types.LatestSignerForChainID(tx.ChainId())
 
 	fromAsString := "."
 	from, err := types.Sender(signer, tx)
