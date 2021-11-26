@@ -90,7 +90,7 @@ func TestEIP2200(t *testing.T) {
 
 		vmctx := BlockContext{
 			CanTransfer: func(StateDB, common.Address, *big.Int) bool { return true },
-			Transfer:    func(StateDB, common.Address, common.Address, *big.Int, *deepmind.Context) {},
+			Transfer:    func(StateDB, common.Address, common.Address, *big.Int, bool, *deepmind.Context) {},
 		}
 		vmenv := NewEVM(vmctx, TxContext{}, statedb, params.AllEthashProtocolChanges, Config{ExtraEips: []int{2200}}, deepmind.NoOpContext)
 
