@@ -122,9 +122,9 @@ func NewCustom(file string, namespace string, customize func(options *opt.Option
 		// By setting those values really high, we disable compaction of the database completely
 		maxInt := int(^uint(0) >> 1)
 
-		opts.CompactionL0Trigger = maxInt
-		opts.WriteL0PauseTrigger = maxInt
-		opts.WriteL0SlowdownTrigger = maxInt
+		options.CompactionL0Trigger = maxInt
+		options.WriteL0PauseTrigger = maxInt
+		options.WriteL0SlowdownTrigger = maxInt
 	}
 
 	// Open the db and recover any potential corruptions
