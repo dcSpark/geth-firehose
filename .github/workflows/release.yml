@@ -4,7 +4,8 @@ on:
   push:
     # Publish `polygon-v1.2.3` tags as releases.
     tags:
-      - "*"
+      - "[a-z0-9]+-v*"
+      - "!**.docker"
 
 jobs:
   build:
@@ -33,7 +34,6 @@ jobs:
           key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
           restore-keys: |
             ${{ runner.os }}-go-
-
 
       - name: Build Binary for ${{matrix.os}}
         run: make geth
