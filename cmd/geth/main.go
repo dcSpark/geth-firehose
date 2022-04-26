@@ -30,6 +30,7 @@ import (
 	"github.com/ethereum/go-ethereum/cmd/utils"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/console/prompt"
+	"github.com/ethereum/go-ethereum/deepmind"
 	"github.com/ethereum/go-ethereum/eth"
 	"github.com/ethereum/go-ethereum/eth/downloader"
 	"github.com/ethereum/go-ethereum/ethclient"
@@ -44,7 +45,8 @@ import (
 	_ "github.com/ethereum/go-ethereum/eth/tracers/js"
 	_ "github.com/ethereum/go-ethereum/eth/tracers/native"
 
-	"gopkg.in/urfave/cli.v1"
+	"github.com/ethereum/go-ethereum/params"
+	cli "gopkg.in/urfave/cli.v1"
 )
 
 const (
@@ -263,7 +265,15 @@ func init() {
 	app.Flags = append(app.Flags, metricsFlags...)
 
 	app.Before = func(ctx *cli.Context) error {
-		return debug.Setup(ctx)
+		if err := debug.Setup(ctx); err != nil {
+			return err
+		}
+		deepmind.MaybeSyncContext().InitVersion(
+			params.VersionWithCommit(gitCommit, gitDate),
+			params.DeepmindVersion(),
+			params.Variant,
+		)
+		return nil
 	}
 	app.After = func(ctx *cli.Context) error {
 		debug.Exit()

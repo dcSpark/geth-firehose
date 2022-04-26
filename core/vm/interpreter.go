@@ -295,7 +295,7 @@ func (in *EVMInterpreter) Run(contract *Contract, input []byte, readOnly bool) (
 		if in.evm.dmContext.Enabled() {
 			if ShouldRecordCallGasEventForOpCode(op) {
 				// Deep mind record before call event last here since operation is about to be executed, 100% sure
-				in.evm.dmContext.RecordBeforeCallGasEvent(dmBeforeCallGasEvent)
+				in.evm.dmContext.RecordGasEvent(dmBeforeCallGasEvent)
 			}
 
 			if cost != 0 {
@@ -327,7 +327,7 @@ func (in *EVMInterpreter) Run(contract *Contract, input []byte, readOnly bool) (
 
 		if in.evm.dmContext.Enabled() && ShouldRecordCallGasEventForOpCode(op) {
 			// Deep mind records after call event last here since operation has been executed
-			in.evm.dmContext.RecordAfterCallGasEvent(contract.Gas)
+			in.evm.dmContext.RecordGasEvent(contract.Gas)
 		}
 
 		// if the operation clears the return data (e.g. it has returning data)

@@ -21,10 +21,14 @@ import (
 )
 
 const (
-	VersionMajor = 1  // Major version component of the current release
-	VersionMinor = 1  // Minor version component of the current release
-	VersionPatch = 9  // Patch version component of the current release
+	VersionMajor = 1    // Major version component of the current release
+	VersionMinor = 1    // Minor version component of the current release
+	VersionPatch = 9    // Patch version component of the current release
 	VersionMeta  = "dm" // Version metadata to append to the version string
+
+	DeepmindVersionMajor = 2
+	DeepmindVersionMinor = 0
+	Variant              = "bsc"
 )
 
 // Version holds the textual version string.
@@ -40,6 +44,10 @@ var VersionWithMeta = func() string {
 	}
 	return v
 }()
+
+func DeepmindVersion() string {
+	return fmt.Sprintf("%d.%d", DeepmindVersionMajor, DeepmindVersionMinor)
+}
 
 // ArchiveVersion holds the textual version string used for Geth archives.
 // e.g. "1.8.11-dea1ce05" for stable releases, or

@@ -4,7 +4,8 @@ on:
   push:
     # Publish `polygon-v1.2.3` tags as releases.
     tags:
-      - "*"
+      - "[a-z0-9]+-v*"
+      - "!**.docker"
 
 jobs:
   build:
@@ -34,26 +35,8 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-go-
 
-
       - name: Build Binary for ${{matrix.os}}
         run: make geth
-
-      # ==============================
-      #       Cross Compile for ARM
-      # ==============================
-
-      - name: Build Binary for ARM
-        if: matrix.os == 'ubuntu-18.04'
-        env:
-          GOPATH: /home/runner/work/woodpecker/go
-        run: |
-          mkdir -p $GOPATH/src/github.com/binance-chain/bsc/
-          cp -r ./* $GOPATH/src/github.com/binance-chain/bsc/
-          cd $GOPATH/src/github.com/binance-chain/bsc/ && make geth-linux-arm
-
-      # ==============================
-      #       Upload artifacts
-      # ==============================
 
       - name: Upload Linux Build
         uses: actions/upload-artifact@v2
@@ -68,41 +51,6 @@ jobs:
         with:
           name: macos
           path: ./build/bin/geth
-
-      # - name: Upload Windows Build
-      #   uses: actions/upload-artifact@v2
-      #   if: matrix.os == 'windows-2019'
-      #   with:
-      #     name: windows
-      #     path: ./build/bin/geth.exe
-
-      - name: Upload ARM-5 Build
-        uses: actions/upload-artifact@v2
-        if: matrix.os == 'ubuntu-18.04'
-        with:
-          name: arm5
-          path: /home/runner/work/woodpecker/go/src/github.com/binance-chain/bsc/build/bin/geth-linux-arm-5
-
-      - name: Upload ARM-6 Build
-        uses: actions/upload-artifact@v2
-        if: matrix.os == 'ubuntu-18.04'
-        with:
-          name: arm6
-          path: /home/runner/work/woodpecker/go/src/github.com/binance-chain/bsc/build/bin/geth-linux-arm-6
-
-      - name: Upload ARM-7 Build
-        uses: actions/upload-artifact@v2
-        if: matrix.os == 'ubuntu-18.04'
-        with:
-          name: arm7
-          path: /home/runner/work/woodpecker/go/src/github.com/binance-chain/bsc/build/bin/geth-linux-arm-7
-
-      - name: Upload ARM-64 Build
-        uses: actions/upload-artifact@v2
-        if: matrix.os == 'ubuntu-18.04'
-        with:
-          name: arm64
-          path: /home/runner/work/woodpecker/go/src/github.com/binance-chain/bsc/build/bin/geth-linux-arm64
 
   release:
     name: Release
