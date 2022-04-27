@@ -31,6 +31,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/core/rawdb"
+	"github.com/ethereum/go-ethereum/deepmind"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/ethdb/leveldb"
 	"github.com/ethereum/go-ethereum/event"
@@ -654,7 +655,7 @@ func (n *Node) OpenDiffDatabase(name string, handles int, diff, namespace string
 	case !filepath.IsAbs(diff):
 		diff = n.ResolvePath(diff)
 	}
-	db, err = leveldb.New(diff, 0, handles, namespace, readonly)
+	db, err = leveldb.New(diff, 0, handles, namespace, readonly, deepmind.CompactionDisabled)
 
 	return db, err
 }
