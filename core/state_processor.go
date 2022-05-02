@@ -439,6 +439,7 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 		}
 
 		if dmContext.Enabled() {
+			// London fork not active in this branch yet, replace by `header.BaseFee` instead of `nil` when it's the case (and remove this comment)
 			dmContext.StartTransaction(tx, nil)
 			dmContext.RecordTrxFrom(msg.From())
 		}

@@ -252,14 +252,11 @@ func (in *EVMInterpreter) Run(contract *Contract, input []byte, readOnly bool) (
 			}
 		}
 
-		// Deepmind keeps contract gas at this point, used later just before executing the call to record the gas before event
-		dmBeforeCallGasEvent := contract.Gas
-
 		// Static portion of gas
 		cost = operation.constantGas // For tracing
 
 		// Deep mind we ignore constant cost because below, we perform a single GAS_CHANGE for both constant + dynamic to aggregate the 2 gas change events
-		if !contract.UseGas(operation.constantGas, deepmind.IgnoredGasChangeReason) {
+		if !contract.UseGas(cost, deepmind.IgnoredGasChangeReason) {
 			return nil, ErrOutOfGas
 		}
 
@@ -286,6 +283,7 @@ func (in *EVMInterpreter) Run(contract *Contract, input []byte, readOnly bool) (
 			var dynamicCost uint64
 			dynamicCost, err = operation.dynamicGas(in.evm, contract, stack, mem, memorySize)
 			cost += dynamicCost // total cost, for debug tracing
+			// Deep mind we ignore constant cost because below, we perform a single GAS_CHANGE for both constant + dynamic to aggregate the 2 gas change events
 			if err != nil || !contract.UseGas(dynamicCost, deepmind.IgnoredGasChangeReason) {
 				return nil, ErrOutOfGas
 			}
@@ -295,11 +293,6 @@ func (in *EVMInterpreter) Run(contract *Contract, input []byte, readOnly bool) (
 		}
 
 		if in.evm.dmContext.Enabled() {
-			if ShouldRecordCallGasEventForOpCode(op) {
-				// Deep mind record before call event last here since operation is about to be executed, 100% sure
-				in.evm.dmContext.RecordGasEvent(dmBeforeCallGasEvent)
-			}
-
 			if cost != 0 {
 				gasChangeReason := OpCodeToGasChangeReason(op)
 				if gasChangeReason != deepmind.IgnoredGasChangeReason {
@@ -322,10 +315,6 @@ func (in *EVMInterpreter) Run(contract *Contract, input []byte, readOnly bool) (
 
 		// execute the operation
 		res, err = operation.execute(&pc, in, callContext)
-		if in.evm.dmContext.Enabled() && ShouldRecordCallGasEventForOpCode(op) {
-			// Deep mind records after call event last here since operation has been executed
-			in.evm.dmContext.RecordGasEvent(contract.Gas)
-		}
 		// if the operation clears the return data (e.g. it has returning data)
 		// set the last return to the result of the operation.
 		if operation.returns {
