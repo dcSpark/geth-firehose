@@ -1206,7 +1206,8 @@ func (p *Parlia) applyTransaction(
 	state.Prepare(expectedTx.Hash(), common.Hash{}, len(*txs))
 
 	if dmContext.Enabled() {
-		dmContext.StartTransaction(expectedTx)
+		dmContext.StartTransaction(expectedTx, nil)
+		dmContext.RecordTrxFrom(msg.From())
 	}
 
 	gasUsed, err := applyMessage(msg, state, header, p.chainConfig, chainContext, dmContext)
@@ -1336,10 +1337,6 @@ func applyMessage(
 	chainContext core.ChainContext,
 	dmContext *deepmind.Context,
 ) (uint64, error) {
-	if dmContext.Enabled() {
-		dmContext.RecordTrxFrom(msg.From())
-	}
-
 	// Create a new context to be used in the EVM environment
 	context := core.NewEVMBlockContext(header, chainContext, nil)
 	// Create a new environment which holds all relevant information

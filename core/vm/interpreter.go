@@ -257,6 +257,7 @@ func (in *EVMInterpreter) Run(contract *Contract, input []byte, readOnly bool) (
 
 		// Static portion of gas
 		cost = operation.constantGas // For tracing
+
 		// Deep mind we ignore constant cost because below, we perform a single GAS_CHANGE for both constant + dynamic to aggregate the 2 gas change events
 		if !contract.UseGas(operation.constantGas, deepmind.IgnoredGasChangeReason) {
 			return nil, ErrOutOfGas
@@ -285,11 +286,12 @@ func (in *EVMInterpreter) Run(contract *Contract, input []byte, readOnly bool) (
 			var dynamicCost uint64
 			dynamicCost, err = operation.dynamicGas(in.evm, contract, stack, mem, memorySize)
 			cost += dynamicCost // total cost, for debug tracing
-
-			// Deep mind we ignore dynamic cost because later below, we perform a single GAS_CHANGE for both constant + dynamic to aggregate the 2 gas change events
 			if err != nil || !contract.UseGas(dynamicCost, deepmind.IgnoredGasChangeReason) {
 				return nil, ErrOutOfGas
 			}
+		}
+		if memorySize > 0 {
+			mem.Resize(memorySize)
 		}
 
 		if in.evm.dmContext.Enabled() {
@@ -313,10 +315,6 @@ func (in *EVMInterpreter) Run(contract *Contract, input []byte, readOnly bool) (
 			}
 		}
 
-		if memorySize > 0 {
-			mem.Resize(memorySize)
-		}
-
 		if in.cfg.Debug {
 			in.cfg.Tracer.CaptureState(pc, op, gasCopy, cost, callContext, in.returnData, in.evm.depth, err)
 			logged = true
@@ -324,12 +322,10 @@ func (in *EVMInterpreter) Run(contract *Contract, input []byte, readOnly bool) (
 
 		// execute the operation
 		res, err = operation.execute(&pc, in, callContext)
-
 		if in.evm.dmContext.Enabled() && ShouldRecordCallGasEventForOpCode(op) {
 			// Deep mind records after call event last here since operation has been executed
 			in.evm.dmContext.RecordGasEvent(contract.Gas)
 		}
-
 		// if the operation clears the return data (e.g. it has returning data)
 		// set the last return to the result of the operation.
 		if operation.returns {
@@ -340,9 +336,6 @@ func (in *EVMInterpreter) Run(contract *Contract, input []byte, readOnly bool) (
 		case err != nil:
 			return nil, err
 		case operation.reverts:
-			// DMLOG: we could print that the execution was REVERTed here,
-			// to inform those who want to know where it failed.
-			// Perhaps we need an ID of execution.. which contract this arrived on.
 			return res, ErrExecutionReverted
 		case operation.halts:
 			return res, nil

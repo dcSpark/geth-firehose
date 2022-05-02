@@ -439,7 +439,7 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 		}
 
 		if dmContext.Enabled() {
-			dmContext.StartTransaction(tx)
+			dmContext.StartTransaction(tx, nil)
 			dmContext.RecordTrxFrom(msg.From())
 		}
 

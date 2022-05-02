@@ -932,9 +932,57 @@ func DoCall(ctx context.Context, b Backend, args CallArgs, blockNrOrHash rpc.Blo
 	if evm.Cancelled() {
 		return nil, fmt.Errorf("execution aborted (timeout = %v)", timeout)
 	}
+
+	if dmContext.Enabled() {
+		config := evm.ChainConfig()
+		// Update the state with pending changes
+		var root []byte
+		if config.IsByzantium(header.Number) {
+			state.Finalise(true)
+		} else {
+			root = state.IntermediateRoot(config.IsEIP158(header.Number)).Bytes()
+		}
+
+		var failed bool
+		var gasUsed uint64
+		if result != nil {
+			failed = result.Failed()
+			gasUsed = result.UsedGas
+		}
+
+		// FIXME: The ApplyMessage can in speculative mode error out with some errors that in sync mode would
+		//        not have been possible. Like ErrNonceTooHight or ErrNonceTooLow. Those error will be in
+		//        `err` value but there is no real way to return it right now. You will get a failed transaction
+		//        without any call and that's it.
+
+		// Create a new receipt for the transaction, storing the intermediate root and gas used by the tx
+		// based on the eip phase, we're passing whether the root touch-delete accounts.
+		receipt := types.NewReceipt(root, failed, gasUsed)
+		receipt.TxHash = dmUnsetTrxHash
+		receipt.GasUsed = gasUsed
+		// if the transaction created a contract, store the creation address in the receipt.
+		if msg.To() == nil {
+			// FIXME (dm): This was `crypto.CreateAddress(vmenv.TxContext.Origin, tx.Nonce())`, is `tx.Nonce()` equivalent to `msg.Nonce()`?
+			receipt.ContractAddress = crypto.CreateAddress(evm.TxContext.Origin, msg.Nonce())
+		}
+		// Set the receipt logs and create a bloom for filtering
+		receipt.Logs = state.GetLogs(dmUnsetTrxHash)
+		receipt.Bloom = types.CreateBloom(types.Receipts{receipt})
+		receipt.BlockHash = header.Hash()
+		receipt.BlockNumber = header.Number
+		receipt.TransactionIndex = 0
+
+		dmContext.EndTransaction(receipt)
+	}
+
+	// If in deep mind context, we should most probably attach the error here inside the deep mind context
+	// somehow so it's attached to the top-leve transaction trace and not return this here. The handler above
+	// us will need to understand that a nil error and nil result means send me everything. For now, it will
+	// simply fail, might even be the "good condition" to do.
 	if err != nil {
 		return result, fmt.Errorf("err: %w (supplied gas %d)", err, msg.Gas())
 	}
+
 	return result, nil
 }
 
@@ -984,6 +1032,24 @@ func (s *PublicBlockChainAPI) Call(ctx context.Context, args CallArgs, blockNrOr
 		return nil, newRevertError(result)
 	}
 	return result.Return(), result.Err
+}
+
+// Execute the given contract's call using deep mind instrumentation return raw bytes containing the
+// string representation of the deep mind log output
+func (s *PublicBlockChainAPI) Execute(ctx context.Context, args CallArgs, blockNrOrHash rpc.BlockNumberOrHash, overrides *StateOverride) (hexutil.Bytes, error) {
+	dmContext := deepmind.NewSpeculativeExecutionContext()
+	result, err := DoCall(ctx, s.b, args, blockNrOrHash, overrides, vm.Config{}, 5*time.Second, s.b.RPCGasCap(), dmContext)
+
+	// As soon as we have an execution result, we should have a complete deep mind log, so let's return it
+	if result != nil {
+		return dmContext.DeepMindLog(), nil
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	return nil, errors.New("no error and no result, invalid state")
 }
 
 func DoEstimateGas(ctx context.Context, b Backend, args CallArgs, blockNrOrHash rpc.BlockNumberOrHash, gasCap uint64) (hexutil.Uint64, error) {

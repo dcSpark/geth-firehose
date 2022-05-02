@@ -260,7 +260,6 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 	if st.dmContext.Enabled() {
 		st.dmContext.RecordGasConsume(st.gas, gas, deepmind.GasChangeReason("intrinsic_gas"))
 	}
-
 	st.gas -= gas
 
 	// Check clause 6
