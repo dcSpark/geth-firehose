@@ -271,7 +271,6 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 
 			return nil, gas, nil
 		}
-
 		evm.StateDB.CreateAccount(addr, evm.dmContext)
 	}
 	evm.Context.Transfer(evm.StateDB, caller.Address(), addr, value, evm.dmContext)
@@ -299,6 +298,10 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 		// The contract is a scoped environment for this execution context only.
 		code := evm.StateDB.GetCode(addr)
 		if len(code) == 0 {
+			if evm.dmContext.Enabled() {
+				evm.dmContext.RecordCallWithoutCode()
+			}
+
 			ret, err = nil, nil // gas is unchanged
 		} else {
 			addrCopy := addr
@@ -354,7 +357,6 @@ func (evm *EVM) CallCode(caller ContractRef, addr common.Address, input []byte, 
 		evm.dmContext.StartCall("CALLCODE")
 		evm.dmContext.RecordCallParams("CALLCODE", caller.Address(), addr, value, gas, input)
 	}
-
 	if evm.vmConfig.NoRecursion && evm.depth > 0 {
 		if evm.dmContext.Enabled() {
 			evm.dmContext.EndFailedCall(gas, true, ErrDepth.Error())
@@ -454,7 +456,6 @@ func (evm *EVM) DelegateCall(caller ContractRef, addr common.Address, input []by
 		parent := caller.(*Contract)
 		evm.dmContext.RecordCallParams("DELEGATE", parent.CallerAddress, addr, parent.value, gas, input)
 	}
-
 	if evm.vmConfig.NoRecursion && evm.depth > 0 {
 		if evm.dmContext.Enabled() {
 			evm.dmContext.EndFailedCall(gas, true, ErrDepth.Error())
@@ -501,7 +502,6 @@ func (evm *EVM) DelegateCall(caller ContractRef, addr common.Address, input []by
 			if evm.dmContext.Enabled() {
 				evm.dmContext.RecordGasConsume(gas, gas, deepmind.FailedExecutionGasChangeReason)
 			}
-
 			gas = 0
 		} else {
 			if evm.dmContext.Enabled() {
@@ -526,7 +526,6 @@ func (evm *EVM) StaticCall(caller ContractRef, addr common.Address, input []byte
 		evm.dmContext.StartCall("STATIC")
 		evm.dmContext.RecordCallParams("STATIC", caller.Address(), addr, deepmind.EmptyValue, gas, input)
 	}
-
 	if evm.vmConfig.NoRecursion && evm.depth > 0 {
 		if evm.dmContext.Enabled() {
 			evm.dmContext.EndFailedCall(gas, true, ErrDepth.Error())
@@ -642,7 +641,6 @@ func (evm *EVM) create(caller ContractRef, codeAndHash *codeAndHash, gas uint64,
 		}
 		return nil, common.Address{}, gas, ErrInsufficientBalance
 	}
-
 	nonce := evm.StateDB.GetNonce(caller.Address())
 	evm.StateDB.SetNonce(caller.Address(), nonce+1, evm.dmContext)
 	// We add this to the access list _before_ taking a snapshot. Even if the creation fails,
@@ -671,7 +669,6 @@ func (evm *EVM) create(caller ContractRef, codeAndHash *codeAndHash, gas uint64,
 	if evm.chainRules.IsEIP158 {
 		evm.StateDB.SetNonce(address, 1, evm.dmContext)
 	}
-
 	evm.Context.Transfer(evm.StateDB, caller.Address(), address, value, evm.dmContext)
 
 	// Initialise a new contract and set the code that is to be used by the EVM.

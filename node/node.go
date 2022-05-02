@@ -654,7 +654,7 @@ func (n *Node) OpenDiffDatabase(name string, handles int, diff, namespace string
 	case !filepath.IsAbs(diff):
 		diff = n.ResolvePath(diff)
 	}
-	db, err = leveldb.New(diff, 0, handles, namespace, readonly)
+	db, err = leveldb.New(diff, 0, handles, namespace, readonly, false)
 
 	return db, err
 }

@@ -138,9 +138,6 @@ func Sender(signer Signer, tx *Transaction) (common.Address, error) {
 	if err != nil {
 		return common.Address{}, err
 	}
-	// DMLOG: tweak `Sender` interface to return a `sigCache` instead of an Address, and
-	// and store the pubkey in the sigCache, so we can print it inline with the the transaction
-	// execution in `AsMessage`.
 	tx.from.Store(sigCache{signer: signer, from: addr})
 	return addr, nil
 }
@@ -433,10 +430,8 @@ func recoverPlain(sighash common.Hash, R, S, Vb *big.Int, homestead bool) (commo
 	if len(pub) == 0 || pub[0] != 4 {
 		return common.Address{}, errors.New("invalid public key")
 	}
-
 	var addr common.Address
 	copy(addr[:], crypto.Keccak256(pub[1:])[12:])
-
 	return addr, nil
 }
 
