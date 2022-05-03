@@ -218,7 +218,6 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 
 			return nil, gas, nil
 		}
-
 		evm.StateDB.CreateAccount(addr, evm.dmContext)
 	}
 	evm.Context.Transfer(evm.StateDB, caller.Address(), addr, value, evm.chainConfig.Bor != nil, evm.dmContext)
@@ -249,6 +248,7 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 			if evm.dmContext.Enabled() {
 				evm.dmContext.RecordCallWithoutCode()
 			}
+
 			ret, err = nil, nil // gas is unchanged
 		} else {
 			addrCopy := addr
@@ -454,7 +454,6 @@ func (evm *EVM) DelegateCall(caller ContractRef, addr common.Address, input []by
 			if evm.dmContext.Enabled() {
 				evm.dmContext.RecordGasConsume(gas, gas, deepmind.FailedExecutionGasChangeReason)
 			}
-
 			gas = 0
 		} else {
 			if evm.dmContext.Enabled() {
@@ -495,7 +494,6 @@ func (evm *EVM) StaticCall(caller ContractRef, addr common.Address, input []byte
 
 		return nil, gas, ErrDepth
 	}
-
 	// We take a snapshot here. This is a bit counter-intuitive, and could probably be skipped.
 	// However, even a staticcall is considered a 'touch'. On mainnet, static calls were introduced
 	// after all empty accounts were deleted, so this is not required. However, if we omit this,
@@ -531,7 +529,6 @@ func (evm *EVM) StaticCall(caller ContractRef, addr common.Address, input []byte
 		// The contract is a scoped environment for this execution context only.
 		contract := NewContract(caller, AccountRef(addrCopy), new(big.Int), gas, evm.dmContext)
 		contract.SetCallCode(&addrCopy, evm.StateDB.GetCodeHash(addrCopy), evm.StateDB.GetCode(addrCopy))
-
 		// When an error was returned by the EVM or when setting the creation code
 		// above we revert to the snapshot and consume any gas remaining. Additionally
 		// when we're in Homestead this also counts for code storage gas errors.
@@ -599,7 +596,6 @@ func (evm *EVM) create(caller ContractRef, codeAndHash *codeAndHash, gas uint64,
 
 		return nil, common.Address{}, gas, ErrInsufficientBalance
 	}
-
 	nonce := evm.StateDB.GetNonce(caller.Address())
 	evm.StateDB.SetNonce(caller.Address(), nonce+1, evm.dmContext)
 	// We add this to the access list _before_ taking a snapshot. Even if the creation fails,

@@ -1,4 +1,4 @@
-**Note** This is a StreamingFast Firehose fork for `Geth` client, see [README.sf.md](./README.sf.md) for instructions on how to manage this repository.
+**Note** This is a StreamingFast Firehose fork for `Geth` client, see [README.fh.md](./README.fh.md) for instructions on how to manage this repository.
 
 # Bor Overview
 Bor is the Official Golang implementation of the Matic protocol. It is a fork of Go Ethereum - https://github.com/ethereum/go-ethereum and EVM compabile.

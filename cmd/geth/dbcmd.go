@@ -112,7 +112,7 @@ Remove blockchain and state databases`,
 			utils.CacheFlag,
 			utils.CacheDatabaseFlag,
 		},
-		Description: `This command performs a database compaction. 
+		Description: `This command performs a database compaction.
 WARNING: This operation may take a very long time to finish, and may cause database
 corruption if it is aborted during execution'!`,
 	}
@@ -148,7 +148,7 @@ corruption if it is aborted during execution'!`,
 			utils.MumbaiFlag,
 			utils.BorMainnetFlag,
 		},
-		Description: `This command deletes the specified database key from the database. 
+		Description: `This command deletes the specified database key from the database.
 WARNING: This is a low-level operation which may cause database corruption!`,
 	}
 	dbPutCmd = cli.Command{
@@ -166,7 +166,7 @@ WARNING: This is a low-level operation which may cause database corruption!`,
 			utils.MumbaiFlag,
 			utils.BorMainnetFlag,
 		},
-		Description: `This command sets a given database key to the given value. 
+		Description: `This command sets a given database key to the given value.
 WARNING: This is a low-level operation which may cause database corruption!`,
 	}
 	dbGetSlotsCmd = cli.Command{
