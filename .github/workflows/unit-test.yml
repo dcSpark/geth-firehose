@@ -37,6 +37,7 @@ jobs:
       env:
         ANDROID_HOME: "" # Skip android test
       run: |
-        # Tests are broken in Polygon, so just build the code instead
+        # Tests are broken in Polygon, so just build the code instead and test only deepmind
         go build ./...
+        go test ./deepmind/...
 
