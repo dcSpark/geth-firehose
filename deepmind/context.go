@@ -12,6 +12,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
+	ethmath "github.com/ethereum/go-ethereum/common/math"
 	"github.com/ethereum/go-ethereum/core/types"
 	"go.uber.org/atomic"
 )
@@ -196,26 +197,51 @@ func (ctx *Context) StartTransaction(tx *types.Transaction, baseFee *big.Int) {
 		r.Bytes(),
 		s.Bytes(),
 		tx.Gas(),
-		// Once London is active in the patch set, this `nil` value should become
-		gasPrice(tx, nil),
+		gasPrice(tx, baseFee),
 		tx.Nonce(),
 		tx.Data(),
 		AccessList(tx.AccessList()),
-		// London fork not active in this branch yet, replace by `tx.GasFeeCap()` when it's the case (and remove this comment)
-		nil,
-		// London fork not active in this branch yet, replace by `tx.GasTipCap()` when it's the case (and remove this comment)
-		nil,
+		maxFeePerGas(tx),
+		maxPriorityFeePerGas(tx),
 		tx.Type(),
 	)
 }
 
-func gasPrice(tx *types.Transaction, baseFee *big.Int) *big.Int {
-	// Once London is active in the patch set, this will not be necessary because DynamicTx should be handled properly
-	_ = baseFee
+func maxFeePerGas(tx *types.Transaction) *big.Int {
+	switch tx.Type() {
+	case types.LegacyTxType, types.AccessListTxType:
+		return nil
 
+	case types.DynamicFeeTxType:
+		return tx.GasFeeCap()
+	}
+
+	panic(errUnhandledTransactionType("maxFeePerGas", tx.Type()))
+}
+
+func maxPriorityFeePerGas(tx *types.Transaction) *big.Int {
+	switch tx.Type() {
+	case types.LegacyTxType, types.AccessListTxType:
+		return nil
+
+	case types.DynamicFeeTxType:
+		return tx.GasTipCap()
+	}
+
+	panic(errUnhandledTransactionType("maxPriorityFeePerGas", tx.Type()))
+}
+
+func gasPrice(tx *types.Transaction, baseFee *big.Int) *big.Int {
 	switch tx.Type() {
 	case types.LegacyTxType, types.AccessListTxType:
 		return tx.GasPrice()
+
+	case types.DynamicFeeTxType:
+		if baseFee == nil {
+			return tx.GasPrice()
+		}
+
+		return ethmath.BigMin(new(big.Int).Add(tx.GasTipCap(), baseFee), tx.GasFeeCap())
 	}
 
 	panic(errUnhandledTransactionType("gasPrice", tx.Type()))
