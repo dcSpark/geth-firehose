@@ -76,6 +76,7 @@ type BlockContext struct {
 	Time        *big.Int       // Provides information for TIME
 	Difficulty  *big.Int       // Provides information for DIFFICULTY
 	BaseFee     *big.Int       // Provides information for BASEFEE
+	Random      *common.Hash   // Provides information for RANDOM
 }
 
 // TxContext provides the EVM with information about a transaction.
@@ -138,7 +139,7 @@ func NewEVM(blockCtx BlockContext, txCtx TxContext, statedb StateDB, chainConfig
 		StateDB:     statedb,
 		Config:      config,
 		chainConfig: chainConfig,
-		chainRules:  chainConfig.Rules(blockCtx.BlockNumber),
+		chainRules:  chainConfig.Rules(blockCtx.BlockNumber, blockCtx.Random != nil),
 		dmContext:   dmContext,
 	}
 	evm.interpreter = NewEVMInterpreter(evm, config)
@@ -178,13 +179,6 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 		evm.dmContext.RecordCallParams("CALL", caller.Address(), addr, value, gas, input)
 	}
 
-	if evm.Config.NoRecursion && evm.depth > 0 {
-		if evm.dmContext.Enabled() {
-			evm.dmContext.EndFailedCall(gas, true, ErrDepth.Error())
-		}
-
-		return nil, gas, nil
-	}
 	// Fail if we're trying to execute above the call depth limit
 	if evm.depth > int(params.CallCreateDepth) {
 		if evm.dmContext.Enabled() {
@@ -207,9 +201,14 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 	if !evm.StateDB.Exist(addr) {
 		if !isPrecompile && evm.chainRules.IsEIP158 && value.Sign() == 0 {
 			// Calling a non existing account, don't do anything, but ping the tracer
-			if evm.Config.Debug && evm.depth == 0 {
-				evm.Config.Tracer.CaptureStart(evm, caller.Address(), addr, false, input, gas, value)
-				evm.Config.Tracer.CaptureEnd(ret, 0, 0, nil)
+			if evm.Config.Debug {
+				if evm.depth == 0 {
+					evm.Config.Tracer.CaptureStart(evm, caller.Address(), addr, false, input, gas, value)
+					evm.Config.Tracer.CaptureEnd(ret, 0, 0, nil)
+				} else {
+					evm.Config.Tracer.CaptureEnter(CALL, caller.Address(), addr, input, gas, value)
+					evm.Config.Tracer.CaptureExit(ret, 0, nil)
+				}
 			}
 
 			if evm.dmContext.Enabled() {
@@ -305,13 +304,6 @@ func (evm *EVM) CallCode(caller ContractRef, addr common.Address, input []byte, 
 		evm.dmContext.RecordCallParams("CALLCODE", caller.Address(), addr, value, gas, input)
 	}
 
-	if evm.Config.NoRecursion && evm.depth > 0 {
-		if evm.dmContext.Enabled() {
-			evm.dmContext.EndFailedCall(gas, true, ErrDepth.Error())
-		}
-
-		return nil, gas, nil
-	}
 	// Fail if we're trying to execute above the call depth limit
 	if evm.depth > int(params.CallCreateDepth) {
 		if evm.dmContext.Enabled() {
@@ -407,13 +399,6 @@ func (evm *EVM) DelegateCall(caller ContractRef, addr common.Address, input []by
 		evm.dmContext.RecordCallParams("DELEGATE", parent.CallerAddress, addr, parent.value, gas, input)
 	}
 
-	if evm.Config.NoRecursion && evm.depth > 0 {
-		if evm.dmContext.Enabled() {
-			evm.dmContext.EndFailedCall(gas, true, ErrDepth.Error())
-		}
-
-		return nil, gas, nil
-	}
 	// Fail if we're trying to execute above the call depth limit
 	if evm.depth > int(params.CallCreateDepth) {
 		if evm.dmContext.Enabled() {
@@ -477,13 +462,6 @@ func (evm *EVM) StaticCall(caller ContractRef, addr common.Address, input []byte
 	if evm.dmContext.Enabled() {
 		evm.dmContext.StartCall("STATIC")
 		evm.dmContext.RecordCallParams("STATIC", caller.Address(), addr, deepmind.EmptyValue, gas, input)
-	}
-
-	if evm.Config.NoRecursion && evm.depth > 0 {
-		if evm.dmContext.Enabled() {
-			evm.dmContext.EndFailedCall(gas, true, ErrDepth.Error())
-		}
-		return nil, gas, nil
 	}
 
 	// Fail if we're trying to execute above the call depth limit
@@ -597,6 +575,9 @@ func (evm *EVM) create(caller ContractRef, codeAndHash *codeAndHash, gas uint64,
 		return nil, common.Address{}, gas, ErrInsufficientBalance
 	}
 	nonce := evm.StateDB.GetNonce(caller.Address())
+	if nonce+1 < nonce {
+		return nil, common.Address{}, gas, ErrNonceUintOverflow
+	}
 	evm.StateDB.SetNonce(caller.Address(), nonce+1, evm.dmContext)
 	// We add this to the access list _before_ taking a snapshot. Even if the creation fails,
 	// the access-list change should not be rolled back
@@ -630,14 +611,6 @@ func (evm *EVM) create(caller ContractRef, codeAndHash *codeAndHash, gas uint64,
 	// The contract is a scoped environment for this execution context only.
 	contract := NewContract(caller, AccountRef(address), value, gas, evm.dmContext)
 	contract.SetCodeOptionalHash(&address, codeAndHash)
-
-	if evm.Config.NoRecursion && evm.depth > 0 {
-		if evm.dmContext.Enabled() {
-			evm.dmContext.EndFailedCall(gas, true, ErrDepth.Error())
-		}
-
-		return nil, address, gas, nil
-	}
 
 	if evm.Config.Debug {
 		if evm.depth == 0 {
@@ -721,7 +694,7 @@ func (evm *EVM) Create(caller ContractRef, code []byte, gas uint64, value *big.I
 
 // Create2 creates a new contract using code as deployment code.
 //
-// The different between Create2 with Create is Create2 uses sha3(0xff ++ msg.sender ++ salt ++ sha3(init_code))[12:]
+// The different between Create2 with Create is Create2 uses keccak256(0xff ++ msg.sender ++ salt ++ keccak256(init_code))[12:]
 // instead of the usual sender-and-nonce-hash as the address where the contract is initialized at.
 func (evm *EVM) Create2(caller ContractRef, code []byte, gas uint64, endowment *big.Int, salt *uint256.Int) (ret []byte, contractAddr common.Address, leftOverGas uint64, err error) {
 	codeAndHash := &codeAndHash{code: code}
