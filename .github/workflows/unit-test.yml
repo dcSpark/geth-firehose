@@ -37,6 +37,5 @@ jobs:
       env:
         ANDROID_HOME: "" # Skip android test
       run: |
-        # Tests are broken in Polygon, so just build the code instead
-        go build ./...
+        make test
 
