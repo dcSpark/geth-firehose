@@ -1353,6 +1353,11 @@ func applyMessage(
 			msg.GasPrice(),
 			msg.Nonce(),
 			msg.Data(),
+			// System transaction in Bor engine from `getSystemMessage` are legacy transaction, so we have three nils here
+			nil,
+			nil,
+			nil,
+			types.LegacyTxType,
 		)
 		dmContext.RecordTrxFrom(msg.From())
 	}
