@@ -670,7 +670,7 @@ func TestRandom(t *testing.T) {
 		{name: "hash(0x010203)", random: crypto.Keccak256Hash([]byte{0x01, 0x02, 0x03})},
 	} {
 		var (
-			env            = NewEVM(BlockContext{Random: &tt.random}, TxContext{}, nil, params.TestChainConfig, Config{})
+			env            = NewEVM(BlockContext{Random: &tt.random}, TxContext{}, nil, params.TestChainConfig, Config{}, deepmind.NoOpContext)
 			stack          = newstack()
 			pc             = uint64(0)
 			evmInterpreter = env.interpreter

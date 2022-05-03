@@ -126,6 +126,7 @@ func NewCustom(file string, namespace string, deepmindCompactionDisabled bool, c
 		options.CompactionL0Trigger = maxInt
 		options.WriteL0PauseTrigger = maxInt
 		options.WriteL0SlowdownTrigger = maxInt
+		options.DisableSeeksCompaction = true
 	}
 
 	// Open the db and recover any potential corruptions
