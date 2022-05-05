@@ -426,6 +426,7 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 	for i, tx := range block.Transactions() {
 		if isPoSA {
 			if isSystemTx, err := posa.IsSystemTransaction(tx, block.Header()); err != nil {
+				bloomProcessors.Close()
 				return statedb, nil, nil, 0, err
 			} else if isSystemTx {
 				systemTxs = append(systemTxs, tx)
@@ -435,6 +436,7 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 
 		msg, err := tx.AsMessage(signer)
 		if err != nil {
+			bloomProcessors.Close()
 			return statedb, nil, nil, 0, err
 		}
 
@@ -451,6 +453,7 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 				dmContext.ExitBlock()
 			}
 
+			bloomProcessors.Close()
 			return statedb, nil, nil, 0, fmt.Errorf("could not apply tx %d [%v]: %w", i, tx.Hash().Hex(), err)
 		}
 

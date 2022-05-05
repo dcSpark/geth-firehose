@@ -9,6 +9,7 @@ import (
 
 type ReceiptProcessor interface {
 	Apply(receipt *types.Receipt)
+	Close()
 }
 
 var (
@@ -25,6 +26,9 @@ type ReceiptBloomGenerator struct {
 
 func (p *ReceiptBloomGenerator) Apply(receipt *types.Receipt) {
 	receipt.Bloom = types.CreateBloom(types.Receipts{receipt})
+}
+
+func (p *ReceiptBloomGenerator) Close() {
 }
 
 func NewAsyncReceiptBloomGenerator(txNums int) *AsyncReceiptBloomGenerator {
