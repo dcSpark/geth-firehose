@@ -441,6 +441,7 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 		}
 
 		if dmContext.Enabled() {
+			// Once London is active in the patch set, this `nil` value should become `block.Header().GetBaseFee()`
 			dmContext.StartTransaction(tx, nil)
 			dmContext.RecordTrxFrom(msg.From())
 		}

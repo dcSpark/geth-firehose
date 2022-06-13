@@ -159,7 +159,7 @@ func (ctx *Context) StartTransaction(tx *types.Transaction, baseFee *big.Int) {
 		s.Bytes(),
 		tx.Gas(),
 		// Once London is active in the patch set, this `nil` value should become
-		gasPrice(tx, nil),
+		gasPrice(tx, baseFee),
 		tx.Nonce(),
 		tx.Data(),
 	)
@@ -174,6 +174,14 @@ func gasPrice(tx *types.Transaction, baseFee *big.Int) *big.Int {
 		return tx.GasPrice()
 	case types.LegacyTxType:
 		return tx.GasPrice()
+	// Once and if London became active in this fork, code below should be uncommented
+	// case types.DynamicFeeTxType:
+	// 	// While we call `GasPrice` here for `DynamicFeeTxType`, it's incorrect as the effective gas price for London transaction
+	// 	// is a computation of `BlockHeader.BaseFee + tx.GasTipCap`. However, we are in the fh1 patch set of deep mind which always report
+	// 	// the max gas price.
+	// 	//
+	// 	// Bottom line, we keep a bogus behavior so that everyone on "fh1" generates the same values
+	// 	return tx.GasPrice()
 	default:
 		panic(fmt.Errorf("unhandled transaction type's %d, carefully review the patch, if this new transaction type add new fields, think about adding them to Firehose Block format, when you see this message, it means something changed in the chain model and great care and thinking most be put here to properly understand the changes and the consequences they bring for the instrumentation", tx.Type()))
 	}
