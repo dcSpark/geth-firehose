@@ -528,14 +528,6 @@ func (w *worker) mainLoop() {
 	for {
 		select {
 		case req := <-w.newWorkCh:
-			if deepmind.Enabled && !deepmind.MiningEnabled {
-				// This receives and processes all transactions received on the P2P network.
-				// By **not** processing this now received transaction, it prevents doing a
-				// speculative execution of the transaction and thus, breaking deep mind that
-				// expects linear execution of all logs.
-				continue
-			}
-
 			w.commitWork(req.interrupt, req.noempty, req.timestamp)
 
 		case req := <-w.getWorkCh:
@@ -593,14 +585,6 @@ func (w *worker) mainLoop() {
 			}
 
 		case ev := <-w.txsCh:
-			if deepmind.Enabled && !deepmind.MiningEnabled {
-				// This receives and processes all transactions received on the P2P network.
-				// By **not** processing this now received transaction, it prevents doing a
-				// speculative execution of the transaction and thus, breaking deep mind that
-				// expects linear execution of all logs.
-				continue
-			}
-
 			// Apply transactions to the pending state if we're not sealing
 			//
 			// Note all transactions received may not be continuous with transactions
