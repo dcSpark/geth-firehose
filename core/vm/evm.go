@@ -662,6 +662,10 @@ func (evm *EVM) create(caller ContractRef, codeAndHash *codeAndHash, gas uint64,
 		}
 
 		evm.StateDB.RevertToSnapshot(snapshot)
+		if evm.dmContext.Enabled() {
+			evm.dmContext.RecordCallFailed(contract.Gas, err.Error())
+		}
+
 		if err != ErrExecutionReverted {
 			contract.UseGas(contract.Gas, deepmind.FailedExecutionGasChangeReason)
 		} else {
