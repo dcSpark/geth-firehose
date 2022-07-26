@@ -652,15 +652,6 @@ func (evm *EVM) create(caller ContractRef, codeAndHash *codeAndHash, gas uint64,
 	// above we revert to the snapshot and consume any gas remaining. Additionally
 	// when we're in homestead this also counts for code storage gas errors.
 	if err != nil && (evm.chainRules.IsHomestead || err != ErrCodeStoreOutOfGas) {
-		if evm.dmContext.Enabled() {
-			if err != nil {
-				evm.dmContext.RecordCallFailed(contract.Gas, err.Error())
-			} else {
-				// From the condition before our Enabled check, if should never happen, but let's be prudent here and record a generic error if it ever happens
-				evm.dmContext.RecordCallFailed(contract.Gas, "unknown create contract error")
-			}
-		}
-
 		evm.StateDB.RevertToSnapshot(snapshot)
 		if evm.dmContext.Enabled() {
 			evm.dmContext.RecordCallFailed(contract.Gas, err.Error())
