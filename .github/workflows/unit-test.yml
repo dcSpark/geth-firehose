@@ -36,6 +36,5 @@ jobs:
       env:
         ANDROID_HOME: "" # Skip android test
       run: |
-        go clean -testcache
         make test
 

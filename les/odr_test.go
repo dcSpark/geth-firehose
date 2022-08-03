@@ -136,11 +136,11 @@ func odrContractCall(ctx context.Context, db ethdb.Database, config *params.Chai
 				from := statedb.GetOrNewStateObject(bankAddr, false, deepmind.NoOpContext)
 				from.SetBalance(math.MaxBig256, deepmind.NoOpContext, "test")
 
-				msg := callmsg{types.NewMessage(from.Address(), &testContractAddr, 0, new(big.Int), 100000, new(big.Int), data, nil, false)}
+				msg := callmsg{types.NewMessage(from.Address(), &testContractAddr, 0, new(big.Int), 100000, big.NewInt(params.InitialBaseFee), big.NewInt(params.InitialBaseFee), new(big.Int), data, nil, true)}
 
 				context := core.NewEVMBlockContext(header, bc, nil)
 				txContext := core.NewEVMTxContext(msg)
-				vmenv := vm.NewEVM(context, txContext, statedb, config, vm.Config{}, deepmind.NoOpContext)
+				vmenv := vm.NewEVM(context, txContext, statedb, config, vm.Config{NoBaseFee: true}, deepmind.NoOpContext)
 
 				//vmenv := core.NewEnv(statedb, config, bc, msg, header, vm.Config{})
 				gp := new(core.GasPool).AddGas(math.MaxUint64)
@@ -151,10 +151,10 @@ func odrContractCall(ctx context.Context, db ethdb.Database, config *params.Chai
 			header := lc.GetHeaderByHash(bhash)
 			state := light.NewState(ctx, header, lc.Odr())
 			state.SetBalance(bankAddr, math.MaxBig256, deepmind.NoOpContext, "test")
-			msg := callmsg{types.NewMessage(bankAddr, &testContractAddr, 0, new(big.Int), 100000, new(big.Int), data, nil, false)}
+			msg := callmsg{types.NewMessage(bankAddr, &testContractAddr, 0, new(big.Int), 100000, big.NewInt(params.InitialBaseFee), big.NewInt(params.InitialBaseFee), new(big.Int), data, nil, true)}
 			context := core.NewEVMBlockContext(header, lc, nil)
 			txContext := core.NewEVMTxContext(msg)
-			vmenv := vm.NewEVM(context, txContext, state, config, vm.Config{}, deepmind.NoOpContext)
+			vmenv := vm.NewEVM(context, txContext, state, config, vm.Config{NoBaseFee: true}, deepmind.NoOpContext)
 			gp := new(core.GasPool).AddGas(math.MaxUint64)
 			result, _ := core.ApplyMessage(vmenv, msg, gp)
 			if state.Error() == nil {
@@ -402,9 +402,9 @@ func testGetTxStatusFromUnindexedPeers(t *testing.T, protocol int) {
 			closeFns = append(closeFns, closePeer)
 
 			// Create a one-time routine for serving message
-			go func(i int, peer *testPeer) {
-				serveMsg(peer, testspec.txLookups[i])
-			}(i, peer)
+			go func(i int, peer *testPeer, lookup uint64) {
+				serveMsg(peer, lookup)
+			}(i, peer, testspec.txLookups[i])
 		}
 
 		// Send out the GetTxStatus requests, compare the result with
