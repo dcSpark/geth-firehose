@@ -2593,7 +2593,7 @@ func BenchmarkPoolMultiAccountBatchInsert(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		key, _ := crypto.GenerateKey()
 		account := crypto.PubkeyToAddress(key.PublicKey)
-		pool.currentState.AddBalance(account, big.NewInt(1000000))
+		pool.currentState.AddBalance(account, big.NewInt(1000000), false, deepmind.NoOpContext, "test")
 		tx := transaction(uint64(0), 100000, key)
 		batches[i] = tx
 	}

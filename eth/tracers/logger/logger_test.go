@@ -31,25 +31,26 @@ type dummyContractRef struct {
 	calledForEach bool
 }
 
-func (dummyContractRef) Address() common.Address     { return common.Address{} }
-func (dummyContractRef) Value() *big.Int             { return new(big.Int) }
-func (dummyContractRef) SetCode(common.Hash, []byte) {}
+func (dummyContractRef) Address() common.Address                        { return common.Address{} }
+func (dummyContractRef) Value() *big.Int                                { return new(big.Int) }
+func (dummyContractRef) SetCode(common.Hash, []byte, *deepmind.Context) {}
 func (d *dummyContractRef) ForEachStorage(callback func(key, value common.Hash) bool) {
 	d.calledForEach = true
 }
-func (d *dummyContractRef) SubBalance(amount *big.Int) {}
-func (d *dummyContractRef) AddBalance(amount *big.Int) {}
-func (d *dummyContractRef) SetBalance(*big.Int)        {}
-func (d *dummyContractRef) SetNonce(uint64)            {}
-func (d *dummyContractRef) Balance() *big.Int          { return new(big.Int) }
+func (d *dummyContractRef) SubBalance(amount *big.Int, dmContext *deepmind.Context) {}
+func (d *dummyContractRef) AddBalance(amount *big.Int, isPrecompile bool, dmContext *deepmind.Context, dmReason deepmind.BalanceChangeReason) {
+}
+func (d *dummyContractRef) SetBalance(*big.Int, *deepmind.Context) {}
+func (d *dummyContractRef) SetNonce(uint64, *deepmind.Context)     {}
+func (d *dummyContractRef) Balance() *big.Int                      { return new(big.Int) }
 
 type dummyStatedb struct {
 	state.StateDB
 }
 
-func (*dummyStatedb) GetRefund() uint64                                       { return 1337 }
-func (*dummyStatedb) GetState(_ common.Address, _ common.Hash) common.Hash    { return common.Hash{} }
-func (*dummyStatedb) SetState(_ common.Address, _ common.Hash, _ common.Hash) {}
+func (*dummyStatedb) GetRefund() uint64                                                            { return 1337 }
+func (*dummyStatedb) GetState(_ common.Address, _ common.Hash) common.Hash                         { return common.Hash{} }
+func (*dummyStatedb) SetState(_ common.Address, _ common.Hash, _ common.Hash, _ *deepmind.Context) {}
 
 func TestStoreCapture(t *testing.T) {
 	var (
