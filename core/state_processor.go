@@ -119,7 +119,7 @@ func (p *LightStateProcessor) Process(block *types.Block, statedb *state.StateDB
 				return statedb, receipts, logs, gasUsed, nil
 			}
 			log.Error("do light process err at block", "num", block.NumberU64(), "err", err)
-			p.bc.removeDiffLayers(diffLayer.DiffHash)
+			p.bc.removeDiffLayers(diffLayer.DiffHash.Load().(common.Hash))
 			// prepare new statedb
 			statedb.StopPrefetcher()
 			parent := p.bc.GetHeader(block.ParentHash(), block.NumberU64()-1)
@@ -197,7 +197,7 @@ func (p *LightStateProcessor) LightProcess(diffLayer *types.DiffLayer, block *ty
 				}
 
 				// fetch previous state
-				var previousAccount state.Account
+				var previousAccount types.StateAccount
 				stateMux.Lock()
 				enc, err := stateTrie.TryGet(diffAccount[:])
 				stateMux.Unlock()
@@ -299,7 +299,7 @@ func (p *LightStateProcessor) LightProcess(diffLayer *types.DiffLayer, block *ty
 				}
 
 				// can't trust the blob, need encode by our-self.
-				latestStateAccount := state.Account{
+				latestStateAccount := types.StateAccount{
 					Nonce:    latestAccount.Nonce,
 					Balance:  latestAccount.Balance,
 					Root:     common.BytesToHash(latestAccount.Root),
@@ -380,18 +380,19 @@ func (p *LightStateProcessor) LightProcess(diffLayer *types.DiffLayer, block *ty
 // transactions failed to execute due to insufficient gas it will return an error.
 func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg vm.Config) (*state.StateDB, types.Receipts, []*types.Log, uint64, error) {
 	var (
-		usedGas   = new(uint64)
-		header    = block.Header()
-		allLogs   []*types.Log
-		gp        = new(GasPool).AddGas(block.GasLimit())
-		dmContext = deepmind.MaybeSyncContext()
+		usedGas     = new(uint64)
+		header      = block.Header()
+		blockHash   = block.Hash()
+		blockNumber = block.Number()
+		allLogs     []*types.Log
+		gp          = new(GasPool).AddGas(block.GasLimit())
+		dmContext   = deepmind.MaybeSyncContext()
 	)
 
 	if dmContext.Enabled() {
 		dmContext.StartBlock(block)
 	}
 
-	signer := types.MakeSigner(p.bc.chainConfig, block.Number())
 	var receipts = make([]*types.Receipt, 0)
 	// Mutate the block and state according to any hard-fork specs
 	if p.config.DAOForkSupport && p.config.DAOForkBlock != nil && p.config.DAOForkBlock.Cmp(block.Number()) == 0 {
@@ -423,6 +424,7 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 
 	// usually do have two tx, one for validator set contract, another for system reward contract.
 	systemTxs := make([]*types.Transaction, 0, 2)
+
 	for i, tx := range block.Transactions() {
 		if isPoSA {
 			if isSystemTx, err := posa.IsSystemTransaction(tx, block.Header()); err != nil {
@@ -434,20 +436,19 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 			}
 		}
 
-		msg, err := tx.AsMessage(signer)
+		msg, err := tx.AsMessage(types.MakeSigner(p.config, header.Number), header.BaseFee)
 		if err != nil {
 			bloomProcessors.Close()
 			return statedb, nil, nil, 0, err
 		}
-
 		if dmContext.Enabled() {
-			// Once London is active in the patch set, this `nil` value should become `block.Header().GetBaseFee()`
-			dmContext.StartTransaction(tx, nil)
+			dmContext.StartTransaction(tx, block.Header().BaseFee)
 			dmContext.RecordTrxFrom(msg.From())
 		}
 
-		statedb.Prepare(tx.Hash(), block.Hash(), i)
-		receipt, err := applyTransaction(msg, p.config, p.bc, nil, gp, statedb, header, tx, usedGas, vmenv, bloomProcessors)
+		statedb.Prepare(tx.Hash(), i)
+
+		receipt, err := applyTransaction(msg, p.config, p.bc, nil, gp, statedb, blockNumber, blockHash, tx, usedGas, vmenv, bloomProcessors)
 		if err != nil {
 			if dmContext.Enabled() {
 				dmContext.RecordFailedTransaction(err)
@@ -498,7 +499,7 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 	return statedb, receipts, allLogs, *usedGas, nil
 }
 
-func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainContext, author *common.Address, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, usedGas *uint64, evm *vm.EVM, receiptProcessors ...ReceiptProcessor) (*types.Receipt, error) {
+func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainContext, author *common.Address, gp *GasPool, statedb *state.StateDB, blockNumber *big.Int, blockHash common.Hash, tx *types.Transaction, usedGas *uint64, evm *vm.EVM, receiptProcessors ...ReceiptProcessor) (*types.Receipt, error) {
 	// Create a new context to be used in the EVM environment.
 	txContext := NewEVMTxContext(msg)
 	evm.Reset(txContext, statedb)
@@ -511,10 +512,10 @@ func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainCon
 
 	// Update the state with pending changes.
 	var root []byte
-	if config.IsByzantium(header.Number) {
+	if config.IsByzantium(blockNumber) {
 		statedb.Finalise(true)
 	} else {
-		root = statedb.IntermediateRoot(config.IsEIP158(header.Number)).Bytes()
+		root = statedb.IntermediateRoot(config.IsEIP158(blockNumber)).Bytes()
 	}
 	*usedGas += result.UsedGas
 
@@ -535,9 +536,9 @@ func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainCon
 	}
 
 	// Set the receipt logs and create the bloom filter.
-	receipt.Logs = statedb.GetLogs(tx.Hash())
-	receipt.BlockHash = statedb.BlockHash()
-	receipt.BlockNumber = header.Number
+	receipt.Logs = statedb.GetLogs(tx.Hash(), blockHash)
+	receipt.BlockHash = blockHash
+	receipt.BlockNumber = blockNumber
 	receipt.TransactionIndex = uint(statedb.TxIndex())
 	for _, receiptProcessor := range receiptProcessors {
 		receiptProcessor.Apply(receipt)
@@ -550,7 +551,7 @@ func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainCon
 // for the transaction, gas used and an error if the transaction failed,
 // indicating the block was invalid.
 func ApplyTransaction(config *params.ChainConfig, bc ChainContext, author *common.Address, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, usedGas *uint64, cfg vm.Config, dmContext *deepmind.Context, receiptProcessors ...ReceiptProcessor) (*types.Receipt, error) {
-	msg, err := tx.AsMessage(types.MakeSigner(config, header.Number))
+	msg, err := tx.AsMessage(types.MakeSigner(config, header.Number), header.BaseFee)
 	if err != nil {
 		return nil, err
 	}
@@ -562,5 +563,5 @@ func ApplyTransaction(config *params.ChainConfig, bc ChainContext, author *commo
 		vm.EVMInterpreterPool.Put(ite)
 		vm.EvmPool.Put(vmenv)
 	}()
-	return applyTransaction(msg, config, bc, author, gp, statedb, header, tx, usedGas, vmenv, receiptProcessors...)
+	return applyTransaction(msg, config, bc, author, gp, statedb, header.Number, header.Hash(), tx, usedGas, vmenv, receiptProcessors...)
 }

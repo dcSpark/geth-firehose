@@ -12,6 +12,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
+	ethmath "github.com/ethereum/go-ethereum/common/math"
 	"github.com/ethereum/go-ethereum/core/types"
 	"go.uber.org/atomic"
 )
@@ -205,9 +206,8 @@ func maxFeePerGas(tx *types.Transaction) *big.Int {
 	case types.LegacyTxType, types.AccessListTxType:
 		return nil
 
-		// Once and if London became active in this fork, code below should be uncommented
-		// case types.DynamicFeeTxType:
-		// 	return tx.GasFeeCap()
+	case types.DynamicFeeTxType:
+		return tx.GasFeeCap()
 	}
 
 	panic(errUnhandledTransactionType("maxFeePerGas", tx.Type()))
@@ -218,9 +218,8 @@ func maxPriorityFeePerGas(tx *types.Transaction) *big.Int {
 	case types.LegacyTxType, types.AccessListTxType:
 		return nil
 
-		// Once and if London became active in this fork, code below should be uncommented
-		// case types.DynamicFeeTxType:
-		// 	return tx.GasTipCap()
+	case types.DynamicFeeTxType:
+		return tx.GasTipCap()
 	}
 
 	panic(errUnhandledTransactionType("maxPriorityFeePerGas", tx.Type()))
@@ -231,17 +230,13 @@ func gasPrice(tx *types.Transaction, baseFee *big.Int) *big.Int {
 	case types.LegacyTxType, types.AccessListTxType:
 		return tx.GasPrice()
 
-		// Once and if London became active in this fork, code below should be uncommented
-		// case types.DynamicFeeTxType:
-		// 	if baseFee == nil {
-		// 		return tx.GasPrice()
-		// 	}
+	case types.DynamicFeeTxType:
+		if baseFee == nil {
+			return tx.GasPrice()
+		}
 
-		// 	return ethmath.BigMin(new(big.Int).Add(tx.GasTipCap(), baseFee), tx.GasFeeCap())
+		return ethmath.BigMin(new(big.Int).Add(tx.GasTipCap(), baseFee), tx.GasFeeCap())
 	}
-
-	// Once and if London became active in this fork, this will be useless since `baseFee` is going to be used by the commented out code
-	_ = baseFee
 
 	panic(errUnhandledTransactionType("gasPrice", tx.Type()))
 }
