@@ -37,8 +37,8 @@ import (
 	"github.com/ethereum/go-ethereum/core/state/snapshot"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/deepmind"
 	"github.com/ethereum/go-ethereum/ethdb"
+	"github.com/ethereum/go-ethereum/firehose"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/node"
 	"github.com/ethereum/go-ethereum/rlp"
@@ -225,11 +225,11 @@ func pruneAll(maindb ethdb.Database, g *core.Genesis) error {
 	}
 	statedb, _ := state.New(common.Hash{}, state.NewDatabase(maindb), nil)
 	for addr, account := range g.Alloc {
-		statedb.AddBalance(addr, account.Balance, false, deepmind.NoOpContext, "ignored")
-		statedb.SetCode(addr, account.Code, deepmind.NoOpContext)
-		statedb.SetNonce(addr, account.Nonce, deepmind.NoOpContext)
+		statedb.AddBalance(addr, account.Balance, false, firehose.NoOpContext, "ignored")
+		statedb.SetCode(addr, account.Code, firehose.NoOpContext)
+		statedb.SetNonce(addr, account.Nonce, firehose.NoOpContext)
 		for key, value := range account.Storage {
-			statedb.SetState(addr, key, value, deepmind.NoOpContext)
+			statedb.SetState(addr, key, value, firehose.NoOpContext)
 		}
 	}
 	root := statedb.IntermediateRoot(false)

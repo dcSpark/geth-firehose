@@ -27,7 +27,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/deepmind"
+	"github.com/ethereum/go-ethereum/firehose"
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/rlp"
 )
@@ -299,7 +299,7 @@ func (s *StateObject) GetCommittedState(db Database, key common.Hash) common.Has
 }
 
 // SetState updates a value in account storage.
-func (s *StateObject) SetState(db Database, key, value common.Hash, dmContext *deepmind.Context) {
+func (s *StateObject) SetState(db Database, key, value common.Hash, firehoseContext *firehose.Context) {
 	// If the fake storage is set, put the temporary state update here.
 	if s.fakeStorage != nil {
 		s.fakeStorage[key] = value
@@ -311,8 +311,8 @@ func (s *StateObject) SetState(db Database, key, value common.Hash, dmContext *d
 		return
 	}
 
-	if dmContext.Enabled() {
-		dmContext.RecordStorageChange(s.address, key, prev, value)
+	if firehoseContext.Enabled() {
+		firehoseContext.RecordStorageChange(s.address, key, prev, value)
 	}
 
 	// New value is different, update and journal the change
@@ -507,7 +507,7 @@ func (s *StateObject) CommitTrie(db Database) (int, error) {
 
 // AddBalance adds amount to s's balance.
 // It is used to add funds to the destination account of a transfer.
-func (s *StateObject) AddBalance(amount *big.Int, dmContext *deepmind.Context, reason deepmind.BalanceChangeReason) {
+func (s *StateObject) AddBalance(amount *big.Int, firehoseContext *firehose.Context, reason firehose.BalanceChangeReason) {
 	// EIP161: We must check emptiness for the objects such that the account
 	// clearing (0,0,0 objects) can take effect.
 	if amount.Sign() == 0 {
@@ -516,21 +516,21 @@ func (s *StateObject) AddBalance(amount *big.Int, dmContext *deepmind.Context, r
 		}
 		return
 	}
-	s.SetBalance(new(big.Int).Add(s.Balance(), amount), dmContext, reason)
+	s.SetBalance(new(big.Int).Add(s.Balance(), amount), firehoseContext, reason)
 }
 
 // SubBalance removes amount from s's balance.
 // It is used to remove funds from the origin account of a transfer.
-func (s *StateObject) SubBalance(amount *big.Int, dmContext *deepmind.Context, reason deepmind.BalanceChangeReason) {
+func (s *StateObject) SubBalance(amount *big.Int, firehoseContext *firehose.Context, reason firehose.BalanceChangeReason) {
 	if amount.Sign() == 0 {
 		return
 	}
-	s.SetBalance(new(big.Int).Sub(s.Balance(), amount), dmContext, reason)
+	s.SetBalance(new(big.Int).Sub(s.Balance(), amount), firehoseContext, reason)
 }
 
-func (s *StateObject) SetBalance(amount *big.Int, dmContext *deepmind.Context, reason deepmind.BalanceChangeReason) {
-	if dmContext.Enabled() {
-		dmContext.RecordBalanceChange(s.address, s.data.Balance, amount, reason)
+func (s *StateObject) SetBalance(amount *big.Int, firehoseContext *firehose.Context, reason firehose.BalanceChangeReason) {
+	if firehoseContext.Enabled() {
+		firehoseContext.RecordBalanceChange(s.address, s.data.Balance, amount, reason)
 	}
 
 	s.db.journal.append(balanceChange{
@@ -601,11 +601,11 @@ func (s *StateObject) CodeSize(db Database) int {
 	return size
 }
 
-func (s *StateObject) SetCode(codeHash common.Hash, code []byte, dmContext *deepmind.Context) {
+func (s *StateObject) SetCode(codeHash common.Hash, code []byte, firehoseContext *firehose.Context) {
 	prevcode := s.Code(s.db.db)
 
-	if dmContext.Enabled() {
-		dmContext.RecordCodeChange(s.address, s.CodeHash(), prevcode, codeHash, code)
+	if firehoseContext.Enabled() {
+		firehoseContext.RecordCodeChange(s.address, s.CodeHash(), prevcode, codeHash, code)
 	}
 
 	s.db.journal.append(codeChange{
@@ -622,9 +622,9 @@ func (s *StateObject) setCode(codeHash common.Hash, code []byte) {
 	s.dirtyCode = true
 }
 
-func (s *StateObject) SetNonce(nonce uint64, dmContext *deepmind.Context) {
-	if dmContext.Enabled() {
-		dmContext.RecordNonceChange(s.address, s.data.Nonce, nonce)
+func (s *StateObject) SetNonce(nonce uint64, firehoseContext *firehose.Context) {
+	if firehoseContext.Enabled() {
+		firehoseContext.RecordNonceChange(s.address, s.data.Nonce, nonce)
 	}
 
 	s.db.journal.append(nonceChange{

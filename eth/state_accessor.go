@@ -28,7 +28,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
-	"github.com/ethereum/go-ethereum/deepmind"
+	"github.com/ethereum/go-ethereum/firehose"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/trie"
 )
@@ -167,7 +167,7 @@ func (eth *Ethereum) StateAtBlock(block *types.Block, reexec uint64, base *state
 }
 
 // stateAtTransaction returns the execution environment of a certain transaction.
-func (eth *Ethereum) stateAtTransaction(block *types.Block, txIndex int, reexec uint64, dmContext *deepmind.Context) (core.Message, vm.BlockContext, *state.StateDB, error) {
+func (eth *Ethereum) stateAtTransaction(block *types.Block, txIndex int, reexec uint64, firehoseContext *firehose.Context) (core.Message, vm.BlockContext, *state.StateDB, error) {
 	// Short circuit if it's genesis block.
 	if block.NumberU64() == 0 {
 		return nil, vm.BlockContext{}, nil, errors.New("no transaction in genesis")
@@ -197,13 +197,13 @@ func (eth *Ethereum) stateAtTransaction(block *types.Block, txIndex int, reexec 
 			return msg, context, statedb, nil
 		}
 		// Not yet the searched for transaction, execute on top of the current state
-		vmenv := vm.NewEVM(context, txContext, statedb, eth.blockchain.Config(), vm.Config{}, dmContext)
+		vmenv := vm.NewEVM(context, txContext, statedb, eth.blockchain.Config(), vm.Config{}, firehoseContext)
 		if posa, ok := eth.Engine().(consensus.PoSA); ok && msg.From() == context.Coinbase &&
 			posa.IsSystemContract(msg.To()) && msg.GasPrice().Cmp(big.NewInt(0)) == 0 {
 			balance := statedb.GetBalance(consensus.SystemAddress)
 			if balance.Cmp(common.Big0) > 0 {
-				statedb.SetBalance(consensus.SystemAddress, big.NewInt(0), dmContext, deepmind.BalanceChangeReason("reward_transfaction_fee"))
-				statedb.AddBalance(context.Coinbase, balance, false, dmContext, deepmind.BalanceChangeReason("reward_transfaction_fee"))
+				statedb.SetBalance(consensus.SystemAddress, big.NewInt(0), firehoseContext, firehose.BalanceChangeReason("reward_transfaction_fee"))
+				statedb.AddBalance(context.Coinbase, balance, false, firehoseContext, firehose.BalanceChangeReason("reward_transfaction_fee"))
 			}
 		}
 		statedb.Prepare(tx.Hash(), idx)

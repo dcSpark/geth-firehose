@@ -33,8 +33,8 @@ import (
 	"github.com/ethereum/go-ethereum/core/systemcontracts"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/deepmind"
 	"github.com/ethereum/go-ethereum/ethdb"
+	"github.com/ethereum/go-ethereum/firehose"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
@@ -283,11 +283,11 @@ func (g *Genesis) ToBlock(db ethdb.Database) *types.Block {
 		panic(err)
 	}
 	for addr, account := range g.Alloc {
-		statedb.AddBalance(addr, account.Balance, false, deepmind.NoOpContext, deepmind.BalanceChangeReason("genesis_balance"))
-		statedb.SetCode(addr, account.Code, deepmind.NoOpContext)
-		statedb.SetNonce(addr, account.Nonce, deepmind.NoOpContext)
+		statedb.AddBalance(addr, account.Balance, false, firehose.NoOpContext, firehose.BalanceChangeReason("genesis_balance"))
+		statedb.SetCode(addr, account.Code, firehose.NoOpContext)
+		statedb.SetNonce(addr, account.Nonce, firehose.NoOpContext)
 		for key, value := range account.Storage {
-			statedb.SetState(addr, key, value, deepmind.NoOpContext)
+			statedb.SetState(addr, key, value, firehose.NoOpContext)
 		}
 	}
 	root := statedb.IntermediateRoot(false)

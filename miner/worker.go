@@ -32,8 +32,8 @@ import (
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/systemcontracts"
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/deepmind"
 	"github.com/ethereum/go-ethereum/event"
+	"github.com/ethereum/go-ethereum/firehose"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/trie"
@@ -557,10 +557,10 @@ func (w *worker) mainLoop() {
 			}
 
 		case ev := <-w.chainSideCh:
-			if deepmind.Enabled && !deepmind.MiningEnabled {
+			if firehose.Enabled && !firehose.MiningEnabled {
 				// This receives and processes all transactions received on the P2P network.
 				// By **not** processing this now received transaction, it prevents doing a
-				// speculative execution of the transaction and thus, breaking deep mind that
+				// speculative execution of the transaction and thus, breaking firehose that
 				// expects linear execution of all logs.
 				continue
 			}
@@ -854,7 +854,7 @@ func (w *worker) updateSnapshot(env *environment) {
 func (w *worker) commitTransaction(env *environment, tx *types.Transaction, receiptProcessors ...core.ReceiptProcessor) ([]*types.Log, error) {
 	snap := env.state.Snapshot()
 
-	receipt, err := core.ApplyTransaction(w.chainConfig, w.chain, &env.coinbase, env.gasPool, env.state, env.header, tx, &env.header.GasUsed, *w.chain.GetVMConfig(), deepmind.NoOpContext, receiptProcessors...)
+	receipt, err := core.ApplyTransaction(w.chainConfig, w.chain, &env.coinbase, env.gasPool, env.state, env.header, tx, &env.header.GasUsed, *w.chain.GetVMConfig(), firehose.NoOpContext, receiptProcessors...)
 	if err != nil {
 		env.state.RevertToSnapshot(snap)
 		return nil, err
@@ -1087,7 +1087,7 @@ func (w *worker) prepareWork(genParams *generateParams) (*environment, error) {
 	}
 
 	// Handle upgrade build-in system contract code
-	systemcontracts.UpgradeBuildInSystemContract(w.chainConfig, header.Number, env.state, deepmind.NoOpContext)
+	systemcontracts.UpgradeBuildInSystemContract(w.chainConfig, header.Number, env.state, firehose.NoOpContext)
 
 	// Accumulate the uncles for the sealing work only if it's allowed.
 	if !genParams.noUncle {
@@ -1147,7 +1147,7 @@ func (w *worker) generateWork(params *generateParams) (*types.Block, error) {
 	defer work.discard()
 
 	w.fillTransactions(nil, work)
-	block, _, err := w.engine.FinalizeAndAssemble(w.chain, work.header, work.state, work.txs, work.unclelist(), work.receipts, deepmind.NoOpContext)
+	block, _, err := w.engine.FinalizeAndAssemble(w.chain, work.header, work.state, work.txs, work.unclelist(), work.receipts, firehose.NoOpContext)
 	return block, err
 }
 
@@ -1205,7 +1205,7 @@ func (w *worker) commit(env *environment, interval func(), update bool, start ti
 		}
 		env.state.CorrectAccountsRoot(w.chain.CurrentBlock().Root())
 
-		block, receipts, err := w.engine.FinalizeAndAssemble(w.chain, types.CopyHeader(env.header), env.state, env.txs, env.unclelist(), env.receipts, deepmind.NoOpContext)
+		block, receipts, err := w.engine.FinalizeAndAssemble(w.chain, types.CopyHeader(env.header), env.state, env.txs, env.unclelist(), env.receipts, firehose.NoOpContext)
 		if err != nil {
 			return err
 		}

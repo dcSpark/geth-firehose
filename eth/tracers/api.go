@@ -38,9 +38,9 @@ import (
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
-	"github.com/ethereum/go-ethereum/deepmind"
 	"github.com/ethereum/go-ethereum/eth/tracers/logger"
 	"github.com/ethereum/go-ethereum/ethdb"
+	"github.com/ethereum/go-ethereum/firehose"
 	"github.com/ethereum/go-ethereum/internal/ethapi"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
@@ -532,15 +532,15 @@ func (api *API) IntermediateRoots(ctx context.Context, hash common.Hash, config 
 		var (
 			msg, _    = tx.AsMessage(signer, block.BaseFee())
 			txContext = core.NewEVMTxContext(msg)
-			vmenv     = vm.NewEVM(vmctx, txContext, statedb, chainConfig, vm.Config{}, deepmind.NoOpContext)
+			vmenv     = vm.NewEVM(vmctx, txContext, statedb, chainConfig, vm.Config{}, firehose.NoOpContext)
 		)
 
 		if posa, ok := api.backend.Engine().(consensus.PoSA); ok {
 			if isSystem, _ := posa.IsSystemTransaction(tx, block.Header()); isSystem {
 				balance := statedb.GetBalance(consensus.SystemAddress)
 				if balance.Cmp(common.Big0) > 0 {
-					statedb.SetBalance(consensus.SystemAddress, big.NewInt(0), deepmind.NoOpContext, deepmind.IgnoredBalanceChangeReason)
-					statedb.AddBalance(vmctx.Coinbase, balance, false, deepmind.NoOpContext, deepmind.IgnoredBalanceChangeReason)
+					statedb.SetBalance(consensus.SystemAddress, big.NewInt(0), firehose.NoOpContext, firehose.IgnoredBalanceChangeReason)
+					statedb.AddBalance(vmctx.Coinbase, balance, false, firehose.NoOpContext, firehose.IgnoredBalanceChangeReason)
 				}
 			}
 		}
@@ -644,13 +644,13 @@ func (api *API) traceBlock(ctx context.Context, block *types.Block, config *Trac
 			if isSystem, _ := posa.IsSystemTransaction(tx, block.Header()); isSystem {
 				balance := statedb.GetBalance(consensus.SystemAddress)
 				if balance.Cmp(common.Big0) > 0 {
-					statedb.SetBalance(consensus.SystemAddress, big.NewInt(0), deepmind.NoOpContext, deepmind.IgnoredBalanceChangeReason)
-					statedb.AddBalance(block.Header().Coinbase, balance, false, deepmind.NoOpContext, deepmind.IgnoredBalanceChangeReason)
+					statedb.SetBalance(consensus.SystemAddress, big.NewInt(0), firehose.NoOpContext, firehose.IgnoredBalanceChangeReason)
+					statedb.AddBalance(block.Header().Coinbase, balance, false, firehose.NoOpContext, firehose.IgnoredBalanceChangeReason)
 				}
 			}
 		}
 		statedb.Prepare(tx.Hash(), i)
-		vmenv := vm.NewEVM(blockCtx, core.NewEVMTxContext(msg), statedb, api.backend.ChainConfig(), vm.Config{}, deepmind.NoOpContext)
+		vmenv := vm.NewEVM(blockCtx, core.NewEVMTxContext(msg), statedb, api.backend.ChainConfig(), vm.Config{}, firehose.NoOpContext)
 		if _, err := core.ApplyMessage(vmenv, msg, new(core.GasPool).AddGas(msg.Gas())); err != nil {
 			failed = err
 			break
@@ -707,12 +707,12 @@ func (api *API) standardTraceBlockToFile(ctx context.Context, block *types.Block
 
 	// Execute transaction, either tracing all or just the requested one
 	var (
-		dumps       []string
-		signer      = types.MakeSigner(api.backend.ChainConfig(), block.Number())
-		chainConfig = api.backend.ChainConfig()
-		vmctx       = core.NewEVMBlockContext(block.Header(), api.chainContext(ctx), nil)
-		canon       = true
-		dmContext   = deepmind.NoOpContext
+		dumps           []string
+		signer          = types.MakeSigner(api.backend.ChainConfig(), block.Number())
+		chainConfig     = api.backend.ChainConfig()
+		vmctx           = core.NewEVMBlockContext(block.Header(), api.chainContext(ctx), nil)
+		canon           = true
+		firehoseContext = firehose.NoOpContext
 	)
 	// Check if there are any overrides: the caller may wish to enable a future
 	// fork when executing this block. Note, such overrides are only applicable to the
@@ -763,13 +763,13 @@ func (api *API) standardTraceBlockToFile(ctx context.Context, block *types.Block
 			}
 		}
 		// Execute the transaction and flush any traces to disk
-		vmenv := vm.NewEVM(vmctx, txContext, statedb, chainConfig, vmConf, dmContext)
+		vmenv := vm.NewEVM(vmctx, txContext, statedb, chainConfig, vmConf, firehoseContext)
 		if posa, ok := api.backend.Engine().(consensus.PoSA); ok {
 			if isSystem, _ := posa.IsSystemTransaction(tx, block.Header()); isSystem {
 				balance := statedb.GetBalance(consensus.SystemAddress)
 				if balance.Cmp(common.Big0) > 0 {
-					statedb.SetBalance(consensus.SystemAddress, big.NewInt(0), dmContext, deepmind.BalanceChangeReason("reward_transfaction_fee"))
-					statedb.AddBalance(vmctx.Coinbase, balance, false, dmContext, deepmind.BalanceChangeReason("reward_transfaction_fee"))
+					statedb.SetBalance(consensus.SystemAddress, big.NewInt(0), firehoseContext, firehose.BalanceChangeReason("reward_transfaction_fee"))
+					statedb.AddBalance(vmctx.Coinbase, balance, false, firehoseContext, firehose.BalanceChangeReason("reward_transfaction_fee"))
 				}
 			}
 		}
@@ -931,14 +931,14 @@ func (api *API) traceTx(ctx context.Context, message core.Message, txctx *Contex
 		tracer = logger.NewStructLogger(config.Config)
 	}
 	// Run the transaction with tracing enabled.
-	vmenv := vm.NewEVM(vmctx, txContext, statedb, api.backend.ChainConfig(), vm.Config{Debug: true, Tracer: tracer, NoBaseFee: true}, deepmind.NoOpContext)
+	vmenv := vm.NewEVM(vmctx, txContext, statedb, api.backend.ChainConfig(), vm.Config{Debug: true, Tracer: tracer, NoBaseFee: true}, firehose.NoOpContext)
 
 	if posa, ok := api.backend.Engine().(consensus.PoSA); ok && message.From() == vmctx.Coinbase &&
 		posa.IsSystemContract(message.To()) && message.GasPrice().Cmp(big.NewInt(0)) == 0 {
 		balance := statedb.GetBalance(consensus.SystemAddress)
 		if balance.Cmp(common.Big0) > 0 {
-			statedb.SetBalance(consensus.SystemAddress, big.NewInt(0), deepmind.NoOpContext, deepmind.IgnoredBalanceChangeReason)
-			statedb.AddBalance(vmctx.Coinbase, balance, false, deepmind.NoOpContext, deepmind.IgnoredBalanceChangeReason)
+			statedb.SetBalance(consensus.SystemAddress, big.NewInt(0), firehose.NoOpContext, firehose.IgnoredBalanceChangeReason)
+			statedb.AddBalance(vmctx.Coinbase, balance, false, firehose.NoOpContext, firehose.IgnoredBalanceChangeReason)
 		}
 	}
 

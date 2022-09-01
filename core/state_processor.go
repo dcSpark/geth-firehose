@@ -36,7 +36,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/deepmind"
+	"github.com/ethereum/go-ethereum/firehose"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
@@ -380,29 +380,29 @@ func (p *LightStateProcessor) LightProcess(diffLayer *types.DiffLayer, block *ty
 // transactions failed to execute due to insufficient gas it will return an error.
 func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg vm.Config) (*state.StateDB, types.Receipts, []*types.Log, uint64, error) {
 	var (
-		usedGas     = new(uint64)
-		header      = block.Header()
-		blockHash   = block.Hash()
-		blockNumber = block.Number()
-		allLogs     []*types.Log
-		gp          = new(GasPool).AddGas(block.GasLimit())
-		dmContext   = deepmind.MaybeSyncContext()
+		usedGas         = new(uint64)
+		header          = block.Header()
+		blockHash       = block.Hash()
+		blockNumber     = block.Number()
+		allLogs         []*types.Log
+		gp              = new(GasPool).AddGas(block.GasLimit())
+		firehoseContext = firehose.MaybeSyncContext()
 	)
 
-	if dmContext.Enabled() {
-		dmContext.StartBlock(block)
+	if firehoseContext.Enabled() {
+		firehoseContext.StartBlock(block)
 	}
 
 	var receipts = make([]*types.Receipt, 0)
 	// Mutate the block and state according to any hard-fork specs
 	if p.config.DAOForkSupport && p.config.DAOForkBlock != nil && p.config.DAOForkBlock.Cmp(block.Number()) == 0 {
-		misc.ApplyDAOHardFork(statedb, dmContext)
+		misc.ApplyDAOHardFork(statedb, firehoseContext)
 	}
 	// Handle upgrade build-in system contract code
-	systemcontracts.UpgradeBuildInSystemContract(p.config, block.Number(), statedb, dmContext)
+	systemcontracts.UpgradeBuildInSystemContract(p.config, block.Number(), statedb, firehoseContext)
 
 	blockContext := NewEVMBlockContext(header, p.bc, nil)
-	vmenv := vm.NewEVM(blockContext, vm.TxContext{}, statedb, p.config, cfg, dmContext)
+	vmenv := vm.NewEVM(blockContext, vm.TxContext{}, statedb, p.config, cfg, firehoseContext)
 
 	txNum := len(block.Transactions())
 	// Iterate over and process the individual transactions
@@ -411,7 +411,7 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 
 	// initilise bloom processors
 	var bloomProcessors ReceiptProcessor
-	if dmContext.Enabled() {
+	if firehoseContext.Enabled() {
 		// We cannot use the async receipt bloom generator in deep mind because we output the receipt
 		// with the transaction and cannot wait for all transactions to finish. We could do it but
 		// requires changes on the reading part to add back log blooms at the end of block.
@@ -441,26 +441,26 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 			bloomProcessors.Close()
 			return statedb, nil, nil, 0, err
 		}
-		if dmContext.Enabled() {
-			dmContext.StartTransaction(tx, block.Header().BaseFee)
-			dmContext.RecordTrxFrom(msg.From())
+		if firehoseContext.Enabled() {
+			firehoseContext.StartTransaction(tx, block.Header().BaseFee)
+			firehoseContext.RecordTrxFrom(msg.From())
 		}
 
 		statedb.Prepare(tx.Hash(), i)
 
 		receipt, err := applyTransaction(msg, p.config, p.bc, nil, gp, statedb, blockNumber, blockHash, tx, usedGas, vmenv, bloomProcessors)
 		if err != nil {
-			if dmContext.Enabled() {
-				dmContext.RecordFailedTransaction(err)
-				dmContext.ExitBlock()
+			if firehoseContext.Enabled() {
+				firehoseContext.RecordFailedTransaction(err)
+				firehoseContext.ExitBlock()
 			}
 
 			bloomProcessors.Close()
 			return statedb, nil, nil, 0, fmt.Errorf("could not apply tx %d [%v]: %w", i, tx.Hash().Hex(), err)
 		}
 
-		if dmContext.Enabled() {
-			dmContext.EndTransaction(receipt)
+		if firehoseContext.Enabled() {
+			firehoseContext.EndTransaction(receipt)
 		}
 
 		commonTxs = append(commonTxs, tx)
@@ -470,17 +470,17 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 		v.Close()
 	}
 
-	// Finalize block is a bit special since it can be enabled without the full deep mind sync.
-	// As such, if deep mind is enabled, we log it and us the deep mind context. Otherwise if
+	// Finalize block is a bit special since it can be enabled without the full firehose sync.
+	// As such, if firehose is enabled, we log it and us the firehose context. Otherwise if
 	// block progress is enabled.
-	if dmContext.Enabled() {
-		dmContext.FinalizeBlock(block)
-	} else if deepmind.BlockProgressEnabled {
-		deepmind.SyncContext().FinalizeBlock(block)
+	if firehoseContext.Enabled() {
+		firehoseContext.FinalizeBlock(block)
+	} else if firehose.BlockProgressEnabled {
+		firehose.SyncContext().FinalizeBlock(block)
 	}
 
 	// Finalize the block, applying any consensus engine specific extras (e.g. block rewards)
-	err := p.engine.Finalize(p.bc, header, statedb, &commonTxs, block.Uncles(), &receipts, &systemTxs, usedGas, dmContext)
+	err := p.engine.Finalize(p.bc, header, statedb, &commonTxs, block.Uncles(), &receipts, &systemTxs, usedGas, firehoseContext)
 	if err != nil {
 		return statedb, receipts, allLogs, *usedGas, err
 	}
@@ -488,12 +488,12 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 		allLogs = append(allLogs, receipt.Logs...)
 	}
 
-	if dmContext.Enabled() {
+	if firehoseContext.Enabled() {
 		// Calculate the total difficulty of the block
 		ptd := p.bc.GetTd(block.ParentHash(), block.NumberU64()-1)
 		td := new(big.Int).Add(block.Difficulty(), ptd)
 
-		dmContext.EndBlock(block, td)
+		firehoseContext.EndBlock(block, td)
 	}
 
 	return statedb, receipts, allLogs, *usedGas, nil
@@ -550,14 +550,14 @@ func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainCon
 // and uses the input parameters for its environment. It returns the receipt
 // for the transaction, gas used and an error if the transaction failed,
 // indicating the block was invalid.
-func ApplyTransaction(config *params.ChainConfig, bc ChainContext, author *common.Address, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, usedGas *uint64, cfg vm.Config, dmContext *deepmind.Context, receiptProcessors ...ReceiptProcessor) (*types.Receipt, error) {
+func ApplyTransaction(config *params.ChainConfig, bc ChainContext, author *common.Address, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, usedGas *uint64, cfg vm.Config, firehoseContext *firehose.Context, receiptProcessors ...ReceiptProcessor) (*types.Receipt, error) {
 	msg, err := tx.AsMessage(types.MakeSigner(config, header.Number), header.BaseFee)
 	if err != nil {
 		return nil, err
 	}
 	// Create a new context to be used in the EVM environment
 	blockContext := NewEVMBlockContext(header, bc, author)
-	vmenv := vm.NewEVM(blockContext, vm.TxContext{}, statedb, config, cfg, dmContext)
+	vmenv := vm.NewEVM(blockContext, vm.TxContext{}, statedb, config, cfg, firehoseContext)
 	defer func() {
 		ite := vmenv.Interpreter()
 		vm.EVMInterpreterPool.Put(ite)
