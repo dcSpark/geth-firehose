@@ -31,9 +31,9 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/deepmind"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/event"
+	"github.com/ethereum/go-ethereum/firehose"
 	"github.com/ethereum/go-ethereum/internal/ethapi"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
@@ -690,7 +690,7 @@ func (c *Bor) Prepare(chain consensus.ChainHeaderReader, header *types.Header) e
 
 // Finalize implements consensus.Engine, ensuring no uncles are set, nor block
 // rewards given.
-func (c *Bor) Finalize(chain consensus.ChainHeaderReader, header *types.Header, state *state.StateDB, txs []*types.Transaction, uncles []*types.Header, dmContext *deepmind.Context) {
+func (c *Bor) Finalize(chain consensus.ChainHeaderReader, header *types.Header, state *state.StateDB, txs []*types.Transaction, uncles []*types.Header, firehoseContext *firehose.Context) {
 	stateSyncData := []*types.StateSyncData{}
 
 	var err error
@@ -698,14 +698,14 @@ func (c *Bor) Finalize(chain consensus.ChainHeaderReader, header *types.Header, 
 	if headerNumber%c.config.Sprint == 0 {
 		cx := chainContext{Chain: chain, Bor: c}
 		// check and commit span
-		if err := c.checkAndCommitSpan(state, header, cx, dmContext); err != nil {
+		if err := c.checkAndCommitSpan(state, header, cx, firehoseContext); err != nil {
 			log.Error("Error while committing span", "error", err)
 			return
 		}
 
 		if !c.WithoutHeimdall {
 			// commit statees
-			stateSyncData, err = c.CommitStates(state, header, cx, dmContext)
+			stateSyncData, err = c.CommitStates(state, header, cx, firehoseContext)
 			if err != nil {
 				log.Error("Error while committing states", "error", err)
 				return
@@ -713,7 +713,7 @@ func (c *Bor) Finalize(chain consensus.ChainHeaderReader, header *types.Header, 
 		}
 	}
 
-	if err = c.changeContractCodeIfNeeded(headerNumber, state, dmContext); err != nil {
+	if err = c.changeContractCodeIfNeeded(headerNumber, state, firehoseContext); err != nil {
 		log.Error("Error changing contract code", "error", err)
 		return
 	}
@@ -739,7 +739,7 @@ func decodeGenesisAlloc(i interface{}) (core.GenesisAlloc, error) {
 	return alloc, nil
 }
 
-func (c *Bor) changeContractCodeIfNeeded(headerNumber uint64, state *state.StateDB, dmContext *deepmind.Context) error {
+func (c *Bor) changeContractCodeIfNeeded(headerNumber uint64, state *state.StateDB, firehoseContext *firehose.Context) error {
 	for blockNumber, genesisAlloc := range c.config.BlockAlloc {
 		if blockNumber == strconv.FormatUint(headerNumber, 10) {
 			allocs, err := decodeGenesisAlloc(genesisAlloc)
@@ -748,7 +748,7 @@ func (c *Bor) changeContractCodeIfNeeded(headerNumber uint64, state *state.State
 			}
 			for addr, account := range allocs {
 				log.Info("change contract code", "address", addr)
-				state.SetCode(addr, account.Code, dmContext)
+				state.SetCode(addr, account.Code, firehoseContext)
 			}
 		}
 	}
@@ -757,7 +757,7 @@ func (c *Bor) changeContractCodeIfNeeded(headerNumber uint64, state *state.State
 
 // FinalizeAndAssemble implements consensus.Engine, ensuring no uncles are set,
 // nor block rewards given, and returns the final block.
-func (c *Bor) FinalizeAndAssemble(chain consensus.ChainHeaderReader, header *types.Header, state *state.StateDB, txs []*types.Transaction, uncles []*types.Header, receipts []*types.Receipt, dmContext *deepmind.Context) (*types.Block, error) {
+func (c *Bor) FinalizeAndAssemble(chain consensus.ChainHeaderReader, header *types.Header, state *state.StateDB, txs []*types.Transaction, uncles []*types.Header, receipts []*types.Receipt, firehoseContext *firehose.Context) (*types.Block, error) {
 	stateSyncData := []*types.StateSyncData{}
 
 	headerNumber := header.Number.Uint64()
@@ -766,7 +766,7 @@ func (c *Bor) FinalizeAndAssemble(chain consensus.ChainHeaderReader, header *typ
 		cx := chainContext{Chain: chain, Bor: c}
 
 		// check and commit span
-		err := c.checkAndCommitSpan(state, header, cx, dmContext)
+		err := c.checkAndCommitSpan(state, header, cx, firehoseContext)
 		if err != nil {
 			log.Error("Error while committing span", "error", err)
 			return nil, err
@@ -774,7 +774,7 @@ func (c *Bor) FinalizeAndAssemble(chain consensus.ChainHeaderReader, header *typ
 
 		if !c.WithoutHeimdall {
 			// commit states
-			stateSyncData, err = c.CommitStates(state, header, cx, dmContext)
+			stateSyncData, err = c.CommitStates(state, header, cx, firehoseContext)
 			if err != nil {
 				log.Error("Error while committing states", "error", err)
 				return nil, err
@@ -782,7 +782,7 @@ func (c *Bor) FinalizeAndAssemble(chain consensus.ChainHeaderReader, header *typ
 		}
 	}
 
-	if err := c.changeContractCodeIfNeeded(headerNumber, state, dmContext); err != nil {
+	if err := c.changeContractCodeIfNeeded(headerNumber, state, firehoseContext); err != nil {
 		log.Error("Error changing contract code", "error", err)
 		return nil, err
 	}
@@ -1032,7 +1032,7 @@ func (c *Bor) checkAndCommitSpan(
 	state *state.StateDB,
 	header *types.Header,
 	chain core.ChainContext,
-	dmContext *deepmind.Context,
+	firehoseContext *firehose.Context,
 ) error {
 	headerNumber := header.Number.Uint64()
 	span, err := c.GetCurrentSpan(header.ParentHash)
@@ -1040,7 +1040,7 @@ func (c *Bor) checkAndCommitSpan(
 		return err
 	}
 	if c.needToCommitSpan(span, headerNumber) {
-		err := c.fetchAndCommitSpan(span.ID+1, state, header, chain, dmContext)
+		err := c.fetchAndCommitSpan(span.ID+1, state, header, chain, firehoseContext)
 		return err
 	}
 	return nil
@@ -1070,7 +1070,7 @@ func (c *Bor) fetchAndCommitSpan(
 	state *state.StateDB,
 	header *types.Header,
 	chain core.ChainContext,
-	dmContext *deepmind.Context,
+	firehoseContext *firehose.Context,
 ) error {
 	var heimdallSpan HeimdallSpan
 
@@ -1147,7 +1147,7 @@ func (c *Bor) fetchAndCommitSpan(
 	msg := getSystemMessage(common.HexToAddress(c.config.ValidatorContract), data)
 
 	// apply message
-	return applyMessage(msg, state, header, c.chainConfig, chain, heimdallSpan.ID, dmContext)
+	return applyMessage(msg, state, header, c.chainConfig, chain, heimdallSpan.ID, firehoseContext)
 }
 
 // CommitStates commit states
@@ -1155,7 +1155,7 @@ func (c *Bor) CommitStates(
 	state *state.StateDB,
 	header *types.Header,
 	chain chainContext,
-	dmContext *deepmind.Context,
+	firehoseContext *firehose.Context,
 ) ([]*types.StateSyncData, error) {
 	stateSyncs := make([]*types.StateSyncData, 0)
 	number := header.Number.Uint64()
@@ -1214,7 +1214,7 @@ func (c *Bor) CommitStates(
 		}
 		stateSyncs = append(stateSyncs, &stateData)
 
-		if err := c.GenesisContractsClient.CommitState(eventRecord, state, header, chain, dmContext); err != nil {
+		if err := c.GenesisContractsClient.CommitState(eventRecord, state, header, chain, firehoseContext); err != nil {
 			return nil, err
 		}
 		lastStateID++
@@ -1339,16 +1339,16 @@ func applyMessage(
 	chainConfig *params.ChainConfig,
 	chainContext core.ChainContext,
 	spanId uint64,
-	dmContext *deepmind.Context,
+	firehoseContext *firehose.Context,
 ) error {
 	var txHash common.Hash
-	if dmContext.Enabled() {
+	if firehoseContext.Enabled() {
 		sha := sha3.NewLegacyKeccak256().(crypto.KeccakState)
 		sha.Reset()
 		rlp.Encode(sha, []interface{}{spanId, msg})
 		sha.Read(txHash[:])
 
-		dmContext.StartTransactionRaw(
+		firehoseContext.StartTransactionRaw(
 			txHash,
 			msg.To(),
 			msg.Value(),
@@ -1363,14 +1363,14 @@ func applyMessage(
 			nil,
 			types.LegacyTxType,
 		)
-		dmContext.RecordTrxFrom(msg.From())
+		firehoseContext.RecordTrxFrom(msg.From())
 	}
 
 	// Create a new context to be used in the EVM environment
 	blockContext := core.NewEVMBlockContext(header, chainContext, &header.Coinbase)
 	// Create a new environment which holds all relevant information
 	// about the transaction and calling mechanisms.
-	vmenv := vm.NewEVM(blockContext, vm.TxContext{}, state, chainConfig, vm.Config{}, dmContext)
+	vmenv := vm.NewEVM(blockContext, vm.TxContext{}, state, chainConfig, vm.Config{}, firehoseContext)
 	// Apply the transaction to the current state (included in the env)
 	_, leftOverGas, err := vmenv.Call(
 		vm.AccountRef(msg.From()),
@@ -1384,10 +1384,10 @@ func applyMessage(
 		state.Finalise(true)
 	}
 
-	if dmContext.Enabled() {
+	if firehoseContext.Enabled() {
 		blockHash := header.Hash()
 		gasUsed := msg.Gas() - leftOverGas
-		cumulativeGasUsed := dmContext.CumulativeGasUsed() + gasUsed
+		cumulativeGasUsed := firehoseContext.CumulativeGasUsed() + gasUsed
 
 		receipt := types.NewReceipt(nil, err != nil, cumulativeGasUsed)
 		receipt.TxHash = txHash
@@ -1402,8 +1402,8 @@ func applyMessage(
 		receipt.Bloom = types.CreateBloom(types.Receipts{receipt})
 		receipt.BlockHash = blockHash
 		receipt.BlockNumber = header.Number
-		receipt.TransactionIndex = dmContext.LastTransactionIndex() + 1
-		dmContext.EndTransaction(receipt)
+		receipt.TransactionIndex = firehoseContext.LastTransactionIndex() + 1
+		firehoseContext.EndTransaction(receipt)
 	}
 
 	return nil

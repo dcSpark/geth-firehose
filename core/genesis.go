@@ -33,8 +33,8 @@ import (
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/deepmind"
 	"github.com/ethereum/go-ethereum/ethdb"
+	"github.com/ethereum/go-ethereum/firehose"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
@@ -93,11 +93,11 @@ func (ga *GenesisAlloc) flush(db ethdb.Database) (common.Hash, error) {
 		return common.Hash{}, err
 	}
 	for addr, account := range *ga {
-		statedb.AddBalance(addr, account.Balance, false, deepmind.NoOpContext, "")
-		statedb.SetCode(addr, account.Code, deepmind.NoOpContext)
-		statedb.SetNonce(addr, account.Nonce, deepmind.NoOpContext)
+		statedb.AddBalance(addr, account.Balance, false, firehose.NoOpContext, "")
+		statedb.SetCode(addr, account.Code, firehose.NoOpContext)
+		statedb.SetNonce(addr, account.Nonce, firehose.NoOpContext)
 		for key, value := range account.Storage {
-			statedb.SetState(addr, key, value, deepmind.NoOpContext)
+			statedb.SetState(addr, key, value, firehose.NoOpContext)
 		}
 	}
 	root, err := statedb.Commit(false)

@@ -16,9 +16,9 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/crypto/secp256k1"
-	"github.com/ethereum/go-ethereum/deepmind"
 	"github.com/ethereum/go-ethereum/eth"
 	"github.com/ethereum/go-ethereum/ethdb"
+	"github.com/ethereum/go-ethereum/firehose"
 	"github.com/ethereum/go-ethereum/params"
 )
 
@@ -125,7 +125,7 @@ func buildNextBlock(t *testing.T, _bor *bor.Bor, chain *core.BlockChain, block *
 	if err != nil {
 		t.Fatalf("%s", err)
 	}
-	_, err = _bor.FinalizeAndAssemble(chain, header, state, nil, nil, nil, deepmind.NoOpContext)
+	_, err = _bor.FinalizeAndAssemble(chain, header, state, nil, nil, nil, firehose.NoOpContext)
 	if err != nil {
 		t.Fatalf("%s", err)
 	}

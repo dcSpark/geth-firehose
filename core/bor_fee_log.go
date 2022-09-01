@@ -6,7 +6,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
-	"github.com/ethereum/go-ethereum/deepmind"
+	"github.com/ethereum/go-ethereum/firehose"
 )
 
 var transferLogSig = common.HexToHash("0xe6497e3ee548a3372136af2fcb0696db31fc6cf20260707645068bd3fe97f3c4")
@@ -26,7 +26,7 @@ func AddTransferLog(
 	input2,
 	output1,
 	output2 *big.Int,
-	dmContext *deepmind.Context,
+	firehoseContext *firehose.Context,
 ) {
 	addTransferLog(
 		state,
@@ -40,7 +40,7 @@ func AddTransferLog(
 		input2,
 		output1,
 		output2,
-		dmContext,
+		firehoseContext,
 	)
 }
 
@@ -57,7 +57,7 @@ func AddFeeTransferLog(
 	input2,
 	output1,
 	output2 *big.Int,
-	dmContext *deepmind.Context,
+	firehoseContext *firehose.Context,
 ) {
 	addTransferLog(
 		state,
@@ -71,7 +71,7 @@ func AddFeeTransferLog(
 		input2,
 		output1,
 		output2,
-		dmContext,
+		firehoseContext,
 	)
 }
 
@@ -88,7 +88,7 @@ func addTransferLog(
 	input2,
 	output1,
 	output2 *big.Int,
-	dmContext *deepmind.Context,
+	firehoseContext *firehose.Context,
 ) {
 	// ignore if amount is 0
 	if amount.Cmp(bigZero) <= 0 {
@@ -118,5 +118,5 @@ func addTransferLog(
 			recipient.Hash(),
 		},
 		Data: data,
-	}, dmContext)
+	}, firehoseContext)
 }

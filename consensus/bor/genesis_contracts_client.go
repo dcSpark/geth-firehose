@@ -11,7 +11,7 @@ import (
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/deepmind"
+	"github.com/ethereum/go-ethereum/firehose"
 	"github.com/ethereum/go-ethereum/internal/ethapi"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
@@ -54,7 +54,7 @@ func (gc *GenesisContractsClient) CommitState(
 	state *state.StateDB,
 	header *types.Header,
 	chCtx chainContext,
-	dmContext *deepmind.Context,
+	firehoseContext *firehose.Context,
 ) error {
 	eventRecord := event.BuildEventRecord()
 	recordBytes, err := rlp.EncodeToBytes(eventRecord)
@@ -70,7 +70,7 @@ func (gc *GenesisContractsClient) CommitState(
 	}
 	log.Info("→ committing new state", "eventRecord", event.String())
 	msg := getSystemMessage(common.HexToAddress(gc.StateReceiverContract), data)
-	if err := applyMessage(msg, state, header, gc.chainConfig, chCtx, 0, dmContext); err != nil {
+	if err := applyMessage(msg, state, header, gc.chainConfig, chCtx, 0, firehoseContext); err != nil {
 		return err
 	}
 	return nil

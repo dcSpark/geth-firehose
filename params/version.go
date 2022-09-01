@@ -26,8 +26,8 @@ const (
 	VersionPatch = 16           // Patch version component of the current release
 	VersionMeta  = "stable-fh2" // Version metadata to append to the version string
 
-	DeepmindVersionMajor = 2
-	DeepmindVersionMinor = 0
+	FirehoseVersionMajor = 2
+	FirehoseVersionMinor = 0
 	Variant              = "polygon"
 )
 
@@ -45,8 +45,8 @@ var VersionWithMeta = func() string {
 	return v
 }()
 
-func DeepmindVersion() string {
-	return fmt.Sprintf("%d.%d", DeepmindVersionMajor, DeepmindVersionMinor)
+func FirehoseVersion() string {
+	return fmt.Sprintf("%d.%d", FirehoseVersionMajor, FirehoseVersionMinor)
 }
 
 // ArchiveVersion holds the textual version string used for Geth archives.
