@@ -56,7 +56,7 @@ func prefetchGuaranteed(prefetcher *triePrefetcher, root common.Hash, keys [][]b
 
 func TestCopyAndClose(t *testing.T) {
 	db := filledStateDB()
-	prefetcher := newTriePrefetcher(db.db, db.originalRoot, "")
+	prefetcher := newTriePrefetcher(db.db, db.originalRoot, common.Hash{}, "")
 	skey := common.HexToHash("aaa")
 	prefetchGuaranteed(prefetcher, db.originalRoot, [][]byte{skey.Bytes()}, common.Hash{})
 	prefetchGuaranteed(prefetcher, db.originalRoot, [][]byte{skey.Bytes()}, common.Hash{})
@@ -81,7 +81,7 @@ func TestCopyAndClose(t *testing.T) {
 
 func TestUseAfterClose(t *testing.T) {
 	db := filledStateDB()
-	prefetcher := newTriePrefetcher(db.db, db.originalRoot, "")
+	prefetcher := newTriePrefetcher(db.db, db.originalRoot, common.Hash{}, "")
 	skey := common.HexToHash("aaa")
 	prefetchGuaranteed(prefetcher, db.originalRoot, [][]byte{skey.Bytes()}, common.Hash{})
 	a := prefetcher.trie(db.originalRoot)
@@ -97,7 +97,7 @@ func TestUseAfterClose(t *testing.T) {
 
 func TestCopyClose(t *testing.T) {
 	db := filledStateDB()
-	prefetcher := newTriePrefetcher(db.db, db.originalRoot, "")
+	prefetcher := newTriePrefetcher(db.db, db.originalRoot, common.Hash{}, "")
 	skey := common.HexToHash("aaa")
 	prefetchGuaranteed(prefetcher, db.originalRoot, [][]byte{skey.Bytes()}, common.Hash{})
 	cpy := prefetcher.copy()

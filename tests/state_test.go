@@ -31,6 +31,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
+	"github.com/ethereum/go-ethereum/deepmind"
 	"github.com/ethereum/go-ethereum/eth/tracers/logger"
 )
 
@@ -231,11 +232,11 @@ func runBenchmark(b *testing.B, t *StateTest) {
 			context := core.NewEVMBlockContext(block.Header(), nil, &t.json.Env.Coinbase)
 			context.GetHash = vmTestBlockHash
 			context.BaseFee = baseFee
-			evm := vm.NewEVM(context, txContext, statedb, config, vmconfig)
+			evm := vm.NewEVM(context, txContext, statedb, config, vmconfig, deepmind.NoOpContext)
 
 			// Create "contract" for sender to cache code analysis.
 			sender := vm.NewContract(vm.AccountRef(msg.From()), vm.AccountRef(msg.From()),
-				nil, 0)
+				nil, 0, deepmind.NoOpContext)
 
 			b.ResetTimer()
 			for n := 0; n < b.N; n++ {
