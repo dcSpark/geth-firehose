@@ -409,7 +409,7 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 	posa, isPoSA := p.engine.(consensus.PoSA)
 	commonTxs := make([]*types.Transaction, 0, txNum)
 
-	// initilise bloom processors
+	// initialise bloom processors
 	var bloomProcessors ReceiptProcessor
 	if firehoseContext.Enabled() {
 		// We cannot use the async receipt bloom generator in deep mind because we output the receipt
@@ -421,6 +421,7 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 	}
 
 	statedb.MarkFullProcessed()
+	signer := types.MakeSigner(p.config, header.Number)
 
 	// usually do have two tx, one for validator set contract, another for system reward contract.
 	systemTxs := make([]*types.Transaction, 0, 2)
@@ -436,7 +437,7 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 			}
 		}
 
-		msg, err := tx.AsMessage(types.MakeSigner(p.config, header.Number), header.BaseFee)
+		msg, err := tx.AsMessage(signer, header.BaseFee)
 		if err != nil {
 			bloomProcessors.Close()
 			return statedb, nil, nil, 0, err
