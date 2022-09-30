@@ -23,7 +23,7 @@ import (
 const (
 	VersionMajor = 0            // Major version component of the current release
 	VersionMinor = 2            // Minor version component of the current release
-	VersionPatch = 16           // Patch version component of the current release
+	VersionPatch = 17           // Patch version component of the current release
 	VersionMeta  = "stable-fh2" // Version metadata to append to the version string
 
 	FirehoseVersionMajor = 2
@@ -49,9 +49,9 @@ func FirehoseVersion() string {
 	return fmt.Sprintf("%d.%d", FirehoseVersionMajor, FirehoseVersionMinor)
 }
 
-// ArchiveVersion holds the textual version string used for Geth archives.
-// e.g. "1.8.11-dea1ce05" for stable releases, or
-//      "1.8.13-unstable-21c059b6" for unstable releases
+// ArchiveVersion holds the textual version string used for Geth archives. e.g.
+// "1.8.11-dea1ce05" for stable releases, or "1.8.13-unstable-21c059b6" for unstable
+// releases.
 func ArchiveVersion(gitCommit string) string {
 	vsn := Version
 	if VersionMeta != "stable" {
