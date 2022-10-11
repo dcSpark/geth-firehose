@@ -72,7 +72,7 @@ require (
 	github.com/syndtr/goleveldb v1.0.1-0.20210819022825-2ae1ddf74ef7
 	github.com/tendermint/go-amino v0.14.1
 	github.com/tendermint/iavl v0.12.0
-	github.com/tendermint/tendermint v0.31.11
+	github.com/tendermint/tendermint v0.31.12
 	github.com/tklauser/go-sysconf v0.3.5 // indirect
 	github.com/tyler-smith/go-bip39 v1.1.0
 	go.etcd.io/bbolt v1.3.5 // indirect
@@ -92,4 +92,5 @@ require (
 replace (
 	github.com/gogo/protobuf v1.1.1 => github.com/gogo/protobuf v1.3.2
 	github.com/gogo/protobuf v1.3.1 => github.com/gogo/protobuf v1.3.2
+	github.com/tendermint/tendermint => github.com/bnb-chain/tendermint v0.31.12
 )
