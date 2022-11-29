@@ -717,7 +717,7 @@ func (l AccessList) marshal() (out []byte) {
 	}
 
 	// There is no need for full precision of the 64 bits, so we restrict it to 32 bits max
-	if len(l) > math.MaxUint32 {
+	if uint64(len(l)) > uint64(math.MaxUint32) {
 		panic(fmt.Errorf("access list length is bigger than 32 bits, refusing to do it"))
 	}
 
@@ -734,7 +734,7 @@ func (l AccessList) marshal() (out []byte) {
 
 	for _, tuple := range l {
 		// There is no need for full precision of the 64 bits, so we restrict it to 32 bits max
-		if len(tuple.StorageKeys) > math.MaxUint32 {
+		if uint64(len(tuple.StorageKeys)) > uint64(math.MaxUint32) {
 			panic(fmt.Errorf("access list length is bigger than 32 bits, refusing to do it"))
 		}
 
