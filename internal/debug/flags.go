@@ -257,8 +257,8 @@ func Setup(ctx *cli.Context, genesis *core.Genesis) error {
 			firehose.GenesisConfig = genesis
 			genesisProvenance = "Flag " + firehoseGenesisFileFlag.Name
 		} else {
-			firehose.GenesisConfig = core.DefaultGenesisBlock()
-			genesisProvenance = "Geth Default"
+			firehose.GenesisConfig = core.DefaultBorMainnetGenesisBlock()
+			genesisProvenance = "Geth Default (Polygon Mainnet)"
 		}
 	}
 
