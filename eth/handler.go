@@ -31,11 +31,13 @@ import (
 	"github.com/ethereum/go-ethereum/core/forkid"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/eth/downloader"
+	"github.com/ethereum/go-ethereum/eth/downloader/whitelist"
 	"github.com/ethereum/go-ethereum/eth/fetcher"
 	"github.com/ethereum/go-ethereum/eth/protocols/eth"
 	"github.com/ethereum/go-ethereum/eth/protocols/snap"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/event"
+	"github.com/ethereum/go-ethereum/internal/ethapi"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p"
 	"github.com/ethereum/go-ethereum/params"
@@ -77,17 +79,18 @@ type txPool interface {
 // handlerConfig is the collection of initialization parameters to create a full
 // node network handler.
 type handlerConfig struct {
-	Database   ethdb.Database            // Database for direct sync insertions
-	Chain      *core.BlockChain          // Blockchain to serve data from
-	TxPool     txPool                    // Transaction pool to propagate from
-	Merger     *consensus.Merger         // The manager for eth1/2 transition
-	Network    uint64                    // Network identifier to adfvertise
-	Sync       downloader.SyncMode       // Whether to snap or full sync
-	BloomCache uint64                    // Megabytes to alloc for snap sync bloom
-	EventMux   *event.TypeMux            // Legacy event mux, deprecate for `feed`
-	Checkpoint *params.TrustedCheckpoint // Hard coded checkpoint for sync challenges
+	Database   ethdb.Database              // Database for direct sync insertions
+	Chain      *core.BlockChain            // Blockchain to serve data from
+	TxPool     txPool                      // Transaction pool to propagate from
+	Merger     *consensus.Merger           // The manager for eth1/2 transition
+	Network    uint64                      // Network identifier to adfvertise
+	Sync       downloader.SyncMode         // Whether to snap or full sync
+	BloomCache uint64                      // Megabytes to alloc for snap sync bloom
+	EventMux   *event.TypeMux              //nolint:staticcheck // Legacy event mux, deprecate for `feed`
+	Checkpoint *params.TrustedCheckpoint   // Hard coded checkpoint for sync challenges
+	EthAPI     *ethapi.PublicBlockChainAPI // EthAPI to interact
 
-	RequiredBlocks map[uint64]common.Hash // Hard coded map of required block hashes for sync challenges
+	PeerRequiredBlocks map[uint64]common.Hash // Hard coded map of required block hashes for sync challenges
 }
 
 type handler struct {
@@ -111,12 +114,14 @@ type handler struct {
 	peers        *peerSet
 	merger       *consensus.Merger
 
+	ethAPI *ethapi.PublicBlockChainAPI // EthAPI to interact
+
 	eventMux      *event.TypeMux
 	txsCh         chan core.NewTxsEvent
 	txsSub        event.Subscription
 	minedBlockSub *event.TypeMuxSubscription
 
-	requiredBlocks map[uint64]common.Hash
+	peerRequiredBlocks map[uint64]common.Hash
 
 	// channels for fetcher, syncer, txsyncLoop
 	quitSync chan struct{}
@@ -133,16 +138,17 @@ func newHandler(config *handlerConfig) (*handler, error) {
 		config.EventMux = new(event.TypeMux) // Nicety initialization for tests
 	}
 	h := &handler{
-		networkID:      config.Network,
-		forkFilter:     forkid.NewFilter(config.Chain),
-		eventMux:       config.EventMux,
-		database:       config.Database,
-		txpool:         config.TxPool,
-		chain:          config.Chain,
-		peers:          newPeerSet(),
-		merger:         config.Merger,
-		requiredBlocks: config.RequiredBlocks,
-		quitSync:       make(chan struct{}),
+		networkID:          config.Network,
+		forkFilter:         forkid.NewFilter(config.Chain),
+		eventMux:           config.EventMux,
+		database:           config.Database,
+		txpool:             config.TxPool,
+		chain:              config.Chain,
+		peers:              newPeerSet(),
+		merger:             config.Merger,
+		ethAPI:             config.EthAPI,
+		peerRequiredBlocks: config.PeerRequiredBlocks,
+		quitSync:           make(chan struct{}),
 	}
 	if config.Sync == downloader.FullSync {
 		// The database seems empty as the current block is the genesis. Yet the snap
@@ -202,7 +208,8 @@ func newHandler(config *handlerConfig) (*handler, error) {
 	// Construct the downloader (long sync) and its backing state bloom if snap
 	// sync is requested. The downloader is responsible for deallocating the state
 	// bloom when it's done.
-	h.downloader = downloader.New(h.checkpointNumber, config.Database, h.eventMux, h.chain, nil, h.removePeer, success)
+	// todo: it'd better to extract maxCapacity into config
+	h.downloader = downloader.New(h.checkpointNumber, config.Database, h.eventMux, h.chain, nil, h.removePeer, success, whitelist.NewService(10))
 
 	// Construct the fetcher (short sync)
 	validator := func(header *types.Header) error {
@@ -432,7 +439,7 @@ func (h *handler) runEthPeer(peer *eth.Peer, handler eth.Handler) error {
 		}()
 	}
 	// If we have any explicit peer required block hashes, request them
-	for number, hash := range h.requiredBlocks {
+	for number := range h.peerRequiredBlocks {
 		resCh := make(chan *eth.Response)
 		if _, err := peer.RequestHeadersByNumber(number, 1, 0, false, resCh); err != nil {
 			return err

@@ -29,6 +29,9 @@ import (
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/consensus/beacon"
 	"github.com/ethereum/go-ethereum/consensus/bor"
+	"github.com/ethereum/go-ethereum/consensus/bor/contract"
+	"github.com/ethereum/go-ethereum/consensus/bor/heimdall"
+	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/span"
 	"github.com/ethereum/go-ethereum/consensus/clique"
 	"github.com/ethereum/go-ethereum/consensus/ethash"
 	"github.com/ethereum/go-ethereum/core"
@@ -88,13 +91,13 @@ var Defaults = Config{
 	Miner: miner.Config{
 		GasCeil:  8000000,
 		GasPrice: big.NewInt(params.GWei),
-		Recommit: 3 * time.Second,
+		Recommit: 125 * time.Second,
 	},
 	TxPool:        core.DefaultTxPoolConfig,
 	RPCGasCap:     50000000,
 	RPCEVMTimeout: 5 * time.Second,
 	GPO:           FullNodeGPO,
-	RPCTxFeeCap:   1, // 1 ether
+	RPCTxFeeCap:   5, // 5 matic
 }
 
 func init() {
@@ -140,10 +143,10 @@ type Config struct {
 
 	TxLookupLimit uint64 `toml:",omitempty"` // The maximum number of blocks from head whose tx indices are reserved.
 
-	// RequiredBlocks is a set of block number -> hash mappings which must be in the
+	// PeerRequiredBlocks is a set of block number -> hash mappings which must be in the
 	// canonical chain of all remote peers. Setting the option makes geth verify the
 	// presence of these blocks for every new peer connection.
-	RequiredBlocks map[uint64]common.Hash `toml:"-"`
+	PeerRequiredBlocks map[uint64]common.Hash `toml:"-"`
 
 	// Light client options
 	LightServ          int  `toml:",omitempty"` // Maximum percentage of time allowed for serving LES requests
@@ -237,7 +240,14 @@ func CreateConsensusEngine(stack *node.Node, chainConfig *params.ChainConfig, et
 	// In order to pass the ethereum transaction tests, we need to set the burn contract which is in the bor config
 	// Then, bor != nil will also be enabled for ethash and clique. Only enable Bor for real if there is a validator contract present.
 	if chainConfig.Bor != nil && chainConfig.Bor.ValidatorContract != "" {
-		return bor.New(chainConfig, db, blockchainAPI, ethConfig.HeimdallURL, ethConfig.WithoutHeimdall)
+		genesisContractsClient := contract.NewGenesisContractsClient(chainConfig, chainConfig.Bor.ValidatorContract, chainConfig.Bor.StateReceiverContract, blockchainAPI)
+		spanner := span.NewChainSpanner(blockchainAPI, contract.ValidatorSet(), chainConfig, common.HexToAddress(chainConfig.Bor.ValidatorContract))
+
+		if ethConfig.WithoutHeimdall {
+			return bor.New(chainConfig, db, blockchainAPI, spanner, nil, genesisContractsClient)
+		} else {
+			return bor.New(chainConfig, db, blockchainAPI, spanner, heimdall.NewHeimdallClient(ethConfig.HeimdallURL), genesisContractsClient)
+		}
 	} else {
 		switch config.PowMode {
 		case ethash.ModeFake:

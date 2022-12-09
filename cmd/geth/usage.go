@@ -56,7 +56,7 @@ var AppHelpFlagGroups = []flags.FlagGroup{
 			utils.EthStatsURLFlag,
 			utils.IdentityFlag,
 			utils.LightKDFFlag,
-			utils.EthRequiredBlocksFlag,
+			utils.EthPeerRequiredBlocksFlag,
 		},
 	},
 	{
@@ -239,10 +239,6 @@ var AppHelpFlagGroups = []flags.FlagGroup{
 			utils.BloomFilterSizeFlag,
 			cli.HelpFlag,
 		},
-	},
-	{
-		Name:  "FIREHOSE",
-		Flags: debug.FirehoseFlags,
 	},
 }
 

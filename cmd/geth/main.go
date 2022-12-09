@@ -111,7 +111,7 @@ var (
 		utils.UltraLightFractionFlag,
 		utils.UltraLightOnlyAnnounceFlag,
 		utils.LightNoSyncServeFlag,
-		utils.EthRequiredBlocksFlag,
+		utils.EthPeerRequiredBlocksFlag,
 		utils.LegacyWhitelistFlag,
 		utils.BloomFilterSizeFlag,
 		utils.CacheFlag,
@@ -278,6 +278,7 @@ func init() {
 
 		return nil
 	}
+
 	app.After = func(ctx *cli.Context) error {
 		debug.Exit()
 		prompt.Stdin.Close() // Resets terminal mode.
