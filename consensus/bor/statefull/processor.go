@@ -72,14 +72,14 @@ func ApplyMessage(
 	header *types.Header,
 	chainConfig *params.ChainConfig,
 	chainContext core.ChainContext,
-	spanId uint64,
+	spanID uint64,
 	firehoseContext *firehose.Context,
 ) (uint64, error) {
 	var txHash common.Hash
 	if firehoseContext.Enabled() {
 		sha := sha3.NewLegacyKeccak256().(crypto.KeccakState)
 		sha.Reset()
-		rlp.Encode(sha, []interface{}{spanId, msg})
+		rlp.Encode(sha, []interface{}{spanID, msg})
 		sha.Read(txHash[:])
 
 		firehoseContext.StartTransactionRaw(
@@ -134,7 +134,7 @@ func ApplyMessage(
 
 		// If the transaction created a contract, store the creation address in the receipt.
 		if msg.To() == nil {
-			receipt.ContractAddress = crypto.CreateAddress(vmenv.TxContext.Origin, spanId)
+			receipt.ContractAddress = crypto.CreateAddress(vmenv.TxContext.Origin, spanID)
 		}
 		// Set the receipt logs and create a bloom for filtering
 		receipt.Logs = state.GetLogs(txHash, blockHash)
