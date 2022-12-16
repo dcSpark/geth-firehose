@@ -19,6 +19,7 @@ package eth
 import (
 	"compress/gzip"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -171,204 +172,78 @@ func (api *PrivateAdminAPI) NicoAdmin() (map[string]interface{}, error) {
 	return nil, nil
 }
 
-func decodeHeaderFromRequest(encodedHeader []hexutil.Bytes) (*types.Header, error) {
-	// &types.Header{
-	// 		Number:      big.NewInt(1),
-	// 		ParentHash:  common.HexToHash("0x27c7b2d6df69bc6c016eae2c4a7983aa6819eb9ab5748019bdbc7c2cbbbf356f"),
-	// 		UncleHash:   common.HexToHash("0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"),
-	// 		Coinbase:    common.HexToAddress("0xc0ea08a2d404d3172d2add29a45be56da40e2949"),
-	// 		Root:        common.HexToHash("0x77d14e10470b5850332524f8cd6f69ad21f070ce92dca33ab2858300242ef2f1"),
-	// 		TxHash:      common.HexToHash("0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421"),
-	// 		ReceiptHash: common.HexToHash("0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421"),
-	// 		Difficulty:  big.NewInt(1),
-	// 		GasLimit:    4015682,
-	// 		GasUsed:     0,
-	// 		Time:        1488928920,
-	// 		Extra:       []byte("www.bw.com"),
-	// 		MixDigest:   common.HexToHash("0x3e140b0784516af5e5ec6730f2fb20cca22f32be399b9e4ad77d32541f798cd0"),
-	// 		Nonce:       types.EncodeNonce(0x0000000000000000), //0x31cbccc8efea6b03f4f8e3376e1f5ffd7771e1d5
-	// 	}
-	fmt.Println("Nico:::decodeHeaderFromRequest")
-
-	headerNumber := big.NewInt(0)
-	if err := rlp.DecodeBytes(encodedHeader[0], headerNumber); err != nil {
-		return nil, err
-	}
-
-	headerParentHash := common.Hash{}
-	if err := rlp.DecodeBytes(encodedHeader[1], &headerParentHash); err != nil {
-		return nil, err
-	}
-
-	headerUncleHash := common.Hash{}
-	if err := rlp.DecodeBytes(encodedHeader[2], &headerUncleHash); err != nil {
-		return nil, err
-	}
-
-	headerCoinbase := common.Address{}
-	if err := rlp.DecodeBytes(encodedHeader[3], &headerCoinbase); err != nil {
-		return nil, err
-	}
-
-	headerRoot := common.Hash{}
-	if err := rlp.DecodeBytes(encodedHeader[4], &headerRoot); err != nil {
-		return nil, err
-	}
-
-	headerTxHash := common.Hash{}
-	if err := rlp.DecodeBytes(encodedHeader[5], &headerTxHash); err != nil {
-		return nil, err
-	}
-
-	headerReceiptHash := common.Hash{}
-	if err := rlp.DecodeBytes(encodedHeader[6], &headerReceiptHash); err != nil {
-		return nil, err
-	}
-
-	headerDifficulty := big.NewInt(0)
-	if err := rlp.DecodeBytes(encodedHeader[7], headerDifficulty); err != nil {
-		return nil, err
-	}
-
-	headerGasLimit := uint64(0)
-	if err := rlp.DecodeBytes(encodedHeader[8], &headerGasLimit); err != nil {
-		return nil, err
-	}
-
-	headerGasUsed := uint64(0)
-	if err := rlp.DecodeBytes(encodedHeader[9], &headerGasUsed); err != nil {
-		return nil, err
-	}
-
-	headerTime := uint64(0)
-	if err := rlp.DecodeBytes(encodedHeader[10], headerTime); err != nil {
-		return nil, err
-	}
-
-	headerExtra := []byte{}
-	if err := rlp.DecodeBytes(encodedHeader[11], &headerExtra); err != nil {
-		return nil, err
-	}
-
-	headerMixDigest := common.Hash{}
-	if err := rlp.DecodeBytes(encodedHeader[12], &headerMixDigest); err != nil {
-		return nil, err
-	}
-
-	headerNonce := types.BlockNonce{}
-	if err := rlp.DecodeBytes(encodedHeader[13], &headerNonce); err != nil {
-		return nil, err
-	}
-
-	header := &types.Header{
-		Number:      headerNumber,
-		ParentHash:  headerParentHash,
-		UncleHash:   headerUncleHash,
-		Coinbase:    headerCoinbase,
-		Root:        headerRoot,
-		TxHash:      headerTxHash,
-		ReceiptHash: headerReceiptHash,
-		Difficulty:  headerDifficulty,
-		GasLimit:    headerGasLimit,
-		GasUsed:     headerGasUsed,
-		Time:        headerTime,
-		Extra:       headerExtra,
-		MixDigest:   headerMixDigest,
-		Nonce:       headerNonce,
-	}
-
-	return header, nil
-}
-
 // AddBlock
-func (s *PrivateAdminAPI) AddBlock(ctx context.Context, tstamp int64, encodedTxs []hexutil.Bytes) (bool, error) {
+func (s *PrivateAdminAPI) AddBlock(ctx context.Context, tstamp hexutil.Bytes, blockHeaders string) (bool, error) { // encodedTxs []hexutil.Bytes,
 	fmt.Println("Nico:::AddBlock")
+
 	fmt.Println("tstamp: ", tstamp)
-	fmt.Println("encodedTxs: ", encodedTxs)
+	// fmt.Println("encodedTxs: ", encodedTxs)
+	fmt.Println("string input: ", blockHeaders)
 	// fmt.Println("encodedHeader: ", encodedHeader)
 
-	// encodedHeader hexutil.Bytes
-	// use the decodeHeaderFromRequest function to decode header argument
-	// header, err := decodeHeaderFromRequest(encodedHeader)
-	// if err != nil {
-	// 	return false, err
-	// }
-	// print decoded header
-	// fmt.Println("Decoded Header: ", header)
+	var jsonMap map[string]interface{}
+	json.Unmarshal([]byte(blockHeaders), &jsonMap)
 
-	txs := make([]*types.Transaction, len(encodedTxs))
-	results := make(map[common.Hash]map[string]interface{})
-	for i, encodedTx := range encodedTxs {
-		tx := new(types.Transaction)
-		// bytes can't be decoded as transaction - this really shouldn't
-		// happen, there is a bug somewhere and we don't want to be silent
-		if err := rlp.DecodeBytes(encodedTx, tx); err != nil {
-			return false, err
-		}
-		txs[i] = tx
-		results[tx.Hash()] = map[string]interface{}{"txIndex": i}
+	fmt.Println("json conversion: ", jsonMap)
+
+	var parsedHeader types.Header
+	err := json.Unmarshal([]byte(blockHeaders), &parsedHeader)
+	if err != nil {
+		panic(err)
 	}
+	fmt.Println("parsed Header: ", parsedHeader)
 
-	fmt.Println("Decoded Txs: ", results)
+	// txs := make([]*types.Transaction, len(jsonMap["transactions"]))
+	// results := make(map[common.Hash]map[string]interface{})
+	// for i, encodedTx := range encodedTxs {
+	// 	tx := new(types.Transaction)
+	// 	// bytes can't be decoded as transaction - this really shouldn't
+	// 	// happen, there is a bug somewhere and we don't want to be silent
+	// 	if err := rlp.DecodeBytes(encodedTx, tx); err != nil {
+	// 		return false, err
+	// 	}
+	// 	txs[i] = tx
+	// 	results[tx.Hash()] = map[string]interface{}{"txIndex": i}
+	// }
+
+	emptyTxs := make([]*types.Transaction, 0)
+
 	fmt.Println("Nico:::AddBlock::CreateBlockFromTxs")
-	CreateBlockFromTxs(ctx, s.eth, txs)
-
-	// types.NewBlockWithHeader(result.Header).WithBody(result.Transactions, result.Uncles)
+	CreateBlockFromTxs(ctx, s.eth, parsedHeader, emptyTxs)
 
 	return true, nil
 }
 
 // CreateBlockFromTxs is a helper function that creates a new block with the given transactions and other params.
-func CreateBlockFromTxs(ctx context.Context, eth *Ethereum, txs []*types.Transaction) (common.Hash, error) { //  header *types.Header
-	/*
-		&types.Header{
-				Number:      big.NewInt(1),
-				ParentHash:  common.HexToHash("0x27c7b2d6df69bc6c016eae2c4a7983aa6819eb9ab5748019bdbc7c2cbbbf356f"),
-				UncleHash:   common.HexToHash("0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"),
-				Coinbase:    common.HexToAddress("0xc0ea08a2d404d3172d2add29a45be56da40e2949"),
-				Root:        common.HexToHash("0x77d14e10470b5850332524f8cd6f69ad21f070ce92dca33ab2858300242ef2f1"),
-				TxHash:      common.HexToHash("0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421"),
-				ReceiptHash: common.HexToHash("0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421"),
-				Difficulty:  big.NewInt(1),
-				GasLimit:    4015682,
-				GasUsed:     0,
-				Time:        1488928920,
-				Extra:       []byte("www.bw.com"),
-				MixDigest:   common.HexToHash("0x3e140b0784516af5e5ec6730f2fb20cca22f32be399b9e4ad77d32541f798cd0"),
-				Nonce:       types.EncodeNonce(0x0000000000000000), //0x31cbccc8efea6b03f4f8e3376e1f5ffd7771e1d5
-			}
-	*/
-
-	block := types.NewBlockWithHeader(&types.Header{
-		Number:      big.NewInt(1),
-		ParentHash:  common.HexToHash("0xfb8964c1a258e5abbd932b1f2ff4b5d763ba79fb000ff1ac1e35632a8bfaaf5e"),
-		UncleHash:   common.HexToHash("0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"),
-		Coinbase:    common.HexToAddress("0x000000000000000000000000000000000000bbbb"),
-		Root:        common.HexToHash("0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421"),
-		TxHash:      common.HexToHash("0x65a18e07e16ece3375e6411a64673626ce27f0dcf8526c0a54f176f3c5aadd88"),
-		ReceiptHash: common.HexToHash("0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421"),
-		Difficulty:  big.NewInt(131072),
-		GasLimit:    9007199254740991,
-		GasUsed:     0,
-		Time:        1661045890,
-		Extra:       []byte("0xf90148a00000000000000000000000000000000000000000000000000000000000000000f8549408b9c73fcc79314c0674534a08f2c8b19b75d4819431cbccc8efea6b03f4f8e3376e1f5ffd7771e1d59498f713957a288099dbbeb195ca80fb8e56a649cd949b85760139f5393d3444a2cfb9de499260d93c28808400000001f8c9b841f009723153e3bc03e2259ef584d3bd185a5262c64674fb98bc5d7d953dc738573f237fefec4d0c88a6a857ce5ea0bc81e2cc293a03bfabbac46e0412fae52c6301b841dd845072f9a078a6a46d1c0803230106383612bbc433d4cb8e49f77444dd92b21358c5d9ca984a8581c26c48b7261c1a22c8625fe271646ad34aee0cac18b2b601b841c997dc86e873c08455733cc66e99cde5ebc192161e9abdc3c8277d3b15446be70112f8dd17f02440f8cd6a1b00e11edee8d67f3d26740097c3d01bda49093de000"),
-		MixDigest:   common.HexToHash("0x63746963616c2062797a616e74696e65206661756c7420746f6c6572616e6365"),
-		Nonce:       types.EncodeNonce(0x0000000000000000),
-	}).WithBody(txs, nil)
-	// block := types.NewBlockWithHeader(header).WithBody(txs, nil)
+func CreateBlockFromTxs(ctx context.Context, eth *Ethereum, header types.Header, txs []*types.Transaction) (common.Hash, error) { //  header *types.Header
+	emptyUncles := make([]*types.Header, 0)
+	block := types.NewBlockWithHeader(&header).WithBody(txs, emptyUncles)
 
 	// print the block
-	fmt.Println("Block: ", block)
+	// fmt.Println("Block: ", block)
+	fmt.Println("Block Header: ", block.Header())
+	// fmt.Println("Parsed Header: ", header)
 
 	// add block to blockchain
-	eth.lock.Lock()
-	defer eth.lock.Unlock()
-	if _, err := eth.blockchain.InsertChain([]*types.Block{block}); err != nil {
-		panic(err) // This cannot happen unless the simulator is wrong, fail in that case
-	}
+	// eth.lock.Lock()
+	// defer eth.lock.Unlock()
+	// if _, err := eth.blockchain.InsertChain([]*types.Block{block}); err != nil {
+	// 	panic(err) // This cannot happen unless the simulator is wrong, fail in that case
+	// }
 
 	// alt 2
-	// w.chain.WriteBlockWithState(b.ChainDb(), block, txs, nil)
+	// WriteBlockWithState(block *types.Block, receipts []*types.Receipt, logs []*types.Log, state *state.StateDB, emitHeadEvent bool)
+	emptyReceipts := make([]*types.Receipt, 0)
+	emptyLogs := make([]*types.Log, 0)
+	stateDB, _ := eth.blockchain.State()
+
+	status, err := eth.blockchain.WriteBlockWithState(block, emptyReceipts, emptyLogs, stateDB, true)
+	// if err != nil {
+	// }
+
+	// print status and err
+	fmt.Println("Status: ", status)
+	fmt.Println("Error: ", err)
 
 	// alternative way to write a block
 	// rawdb.WriteBody(db, hash, n, block.Body())
