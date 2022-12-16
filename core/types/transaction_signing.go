@@ -131,7 +131,11 @@ func (s EIP155Signer) Sender(tx *Transaction) (common.Address, error) {
 	if !tx.Protected() {
 		return HomesteadSigner{}.Sender(tx)
 	}
+	// Nico: disabling this bc I'm getting an issue between 200202 and 2001
 	if tx.ChainId().Cmp(s.chainId) != 0 {
+		// print chainid and s.chainId
+		fmt.Println("tx.ChainId(): ", tx.ChainId())
+		fmt.Println("s.chainId: ", s.chainId)
 		return common.Address{}, ErrInvalidChainId
 	}
 	V := new(big.Int).Sub(tx.data.V, s.chainIdMul)

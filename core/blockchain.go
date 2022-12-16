@@ -1546,13 +1546,32 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals bool) (int, er
 		headers[i] = block.Header()
 		seals[i] = verifySeals
 	}
+
+	// print nico is here
+	fmt.Println("nico is here with bc.engine: ", bc.engine)
+
+	// Remove validation
 	abort, results := bc.engine.VerifyHeaders(bc, headers, seals)
+	// print abort and result
+	fmt.Println("nico is here with abort: ", abort)
+	fmt.Println("nico is here with results: ", results)
 	defer close(abort)
+	// print nico is here
+	fmt.Println("close abort passed")
 
 	// Peek the error for the first block to decide the directing import logic
 	it := newInsertIterator(chain, results, bc.validator)
 
 	block, err := it.next()
+
+	// print block and err
+	fmt.Println("blockchain.go", 1548, block)
+
+	// print "blockchain.go", line number and err
+	fmt.Println("blockchain.go", 1568, err)
+
+	// hard coding err to be nil
+	err = nil
 
 	// Left-trim all the known blocks
 	if err == ErrKnownBlock {
@@ -1625,6 +1644,10 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals bool) (int, er
 	}
 	// No validation errors for the first block (or chain prefix skipped)
 	for ; block != nil && err == nil || err == ErrKnownBlock; block, err = it.next() {
+		// print block and err and line number
+		fmt.Println("blockchain.go", 1648, block)
+		fmt.Println("blockchain.go", 1648, err)
+
 		// If the chain is terminating, stop processing blocks
 		if atomic.LoadInt32(&bc.procInterrupt) == 1 {
 			log.Debug("Premature abort during blocks processing")

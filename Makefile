@@ -20,6 +20,11 @@ geth:
 all:
 	$(GORUN) build/ci.go install
 
+gethops:
+	$(GORUN) build/ci.go install ./cmd/gethops
+	@echo "Done building."
+	@echo "Run \"$(GOBIN)/gethops --help\""
+
 android:
 	$(GORUN) build/ci.go aar --local
 	@echo "Done building."
