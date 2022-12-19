@@ -1310,6 +1310,158 @@ func (bc *BlockChain) writeKnownBlock(block *types.Block) error {
 }
 
 // WriteBlockWithState writes the block and all associated state to the database.
+func (bc *BlockChain) AltWriteBlockWithState(block *types.Block, blockHash common.Hash, receipts []*types.Receipt, logs []*types.Log, state *state.StateDB, emitHeadEvent bool) (status WriteStatus, err error) {
+	bc.chainmu.Lock()
+	defer bc.chainmu.Unlock()
+
+	return bc.altWriteBlockWithState(block, blockHash, receipts, logs, state, emitHeadEvent)
+}
+
+// Alternative version of WriteBlockWithState that takes a precalculated state and block hash
+func (bc *BlockChain) altWriteBlockWithState(block *types.Block, blockHash common.Hash, receipts []*types.Receipt, logs []*types.Log, state *state.StateDB, emitHeadEvent bool) (status WriteStatus, err error) {
+	bc.wg.Add(1)
+	defer bc.wg.Done()
+
+	// Calculate the total difficulty of the block
+	ptd := bc.GetTd(block.ParentHash(), block.NumberU64()-1)
+	fmt.Println("ptd is: ", ptd, " parent hash: ", block.ParentHash().String(), "blockNumber -1: ", block.NumberU64()-1)
+	if ptd == nil {
+		return NonStatTy, consensus.ErrUnknownAncestor
+	}
+	// Make sure no inconsistent state is leaked during insertion
+	currentBlock := bc.CurrentBlock()
+	localTd := bc.GetTd(currentBlock.Hash(), currentBlock.NumberU64())
+	externTd := new(big.Int).Add(block.Difficulty(), ptd)
+
+	// Irrelevant of the canonical status, write the block itself to the database.
+	//
+	// Note all the components of block(td, hash->number map, header, body, receipts)
+	// should be written atomically. BlockBatch is used for containing all components.
+	blockBatch := bc.db.NewBatch()
+	rawdb.WriteTd(blockBatch, blockHash, block.NumberU64(), externTd)
+	rawdb.WriteBlock(blockBatch, block)
+	rawdb.WriteReceipts(blockBatch, blockHash, block.NumberU64(), receipts)
+	rawdb.WritePreimages(blockBatch, state.Preimages())
+	if err := blockBatch.Write(); err != nil {
+		log.Crit("Failed to write block into disk", "err", err)
+	}
+	// Commit all cached state changes into underlying memory database.
+	root, err := state.Commit(bc.chainConfig.IsEIP158(block.Number()))
+	if err != nil {
+		return NonStatTy, err
+	}
+	triedb := bc.stateCache.TrieDB()
+
+	// If we're running an archive node, always flush
+	if bc.cacheConfig.TrieDirtyDisabled {
+		if err := triedb.Commit(root, false); err != nil {
+			return NonStatTy, err
+		}
+	} else {
+		// Full but not archive node, do proper garbage collection
+		triedb.Reference(root, common.Hash{}) // metadata reference to keep trie alive
+		bc.triegc.Push(root, -int64(block.NumberU64()))
+
+		if current := block.NumberU64(); current > TriesInMemory {
+			// If we exceeded our memory allowance, flush matured singleton nodes to disk
+			var (
+				nodes, imgs = triedb.Size()
+				limit       = common.StorageSize(bc.cacheConfig.TrieDirtyLimit) * 1024 * 1024
+			)
+			if nodes > limit || imgs > 4*1024*1024 {
+				triedb.Cap(limit - ethdb.IdealBatchSize)
+			}
+			// Find the next state trie we need to commit
+			chosen := current - TriesInMemory
+
+			// If we exceeded out time allowance, flush an entire trie to disk
+			if bc.gcproc > bc.cacheConfig.TrieTimeLimit {
+				// If the header is missing (canonical chain behind), we're reorging a low
+				// diff sidechain. Suspend committing until this operation is completed.
+				header := bc.GetHeaderByNumber(chosen)
+				if header == nil {
+					log.Warn("Reorg in progress or TriesInMemory value has been increased, trie commit postponed", "number", chosen, "default_tries_in_memory", DefaultTriesInMemory, "tries_in_memory", TriesInMemory)
+				} else {
+					// If we're exceeding limits but haven't reached a large enough memory gap,
+					// warn the user that the system is becoming unstable.
+					if chosen < lastWrite+TriesInMemory && bc.gcproc >= 2*bc.cacheConfig.TrieTimeLimit {
+						log.Info("State in memory for too long, committing", "time", bc.gcproc, "allowance", bc.cacheConfig.TrieTimeLimit, "optimum", float64(chosen-lastWrite)/float64(TriesInMemory))
+					}
+					// Flush an entire trie and restart the counters
+					triedb.Commit(header.Root, true)
+					lastWrite = chosen
+					bc.gcproc = 0
+				}
+			}
+			// Garbage collect anything below our required write retention
+			for !bc.triegc.Empty() {
+				root, number := bc.triegc.Pop()
+				if uint64(-number) > chosen {
+					bc.triegc.Push(root, number)
+					break
+				}
+				triedb.Dereference(root.(common.Hash))
+			}
+		}
+	}
+	// If the total difficulty is higher than our known, add it to the canonical chain
+	// Second clause in the if statement reduces the vulnerability to selfish mining.
+	// Please refer to http://www.cs.cornell.edu/~ie53/publications/btcProcFC.pdf
+	reorg := externTd.Cmp(localTd) > 0
+	currentBlock = bc.CurrentBlock()
+	if !reorg && externTd.Cmp(localTd) == 0 {
+		fmt.Println("total difficulty higher than our known")
+		// Split same-difficulty blocks by number, then preferentially select
+		// the block generated by the local miner as the canonical block.
+		if block.NumberU64() < currentBlock.NumberU64() {
+			reorg = true
+		} else if block.NumberU64() == currentBlock.NumberU64() {
+			var currentPreserve, blockPreserve bool
+			if bc.shouldPreserve != nil {
+				currentPreserve, blockPreserve = bc.shouldPreserve(currentBlock), bc.shouldPreserve(block)
+			}
+			reorg = !currentPreserve && (blockPreserve || mrand.Float64() < 0.5)
+		}
+	}
+	if reorg {
+		fmt.Println("reorg")
+		// Reorganise the chain if the parent is not the head block
+		if block.ParentHash() != currentBlock.Hash() {
+			fmt.Println("reorg in progress")
+			if err := bc.reorg(currentBlock, block); err != nil {
+				return NonStatTy, err
+			}
+		}
+		status = CanonStatTy
+	} else {
+		status = SideStatTy
+	}
+	// Set new head.
+	if status == CanonStatTy {
+		bc.writeHeadBlock(block)
+	}
+	bc.futureBlocks.Remove(blockHash)
+
+	if status == CanonStatTy {
+		bc.chainFeed.Send(ChainEvent{Block: block, Hash: blockHash, Logs: logs})
+		if len(logs) > 0 {
+			bc.logsFeed.Send(logs)
+		}
+		// In theory we should fire a ChainHeadEvent when we inject
+		// a canonical block, but sometimes we can insert a batch of
+		// canonicial blocks. Avoid firing too much ChainHeadEvents,
+		// we will fire an accumulated ChainHeadEvent and disable fire
+		// event here.
+		if emitHeadEvent {
+			bc.chainHeadFeed.Send(ChainHeadEvent{Block: block})
+		}
+	} else {
+		bc.chainSideFeed.Send(ChainSideEvent{Block: block})
+	}
+	return status, nil
+}
+
+// WriteBlockWithState writes the block and all associated state to the database.
 func (bc *BlockChain) WriteBlockWithState(block *types.Block, receipts []*types.Receipt, logs []*types.Log, state *state.StateDB, emitHeadEvent bool) (status WriteStatus, err error) {
 	bc.chainmu.Lock()
 	defer bc.chainmu.Unlock()
@@ -1340,7 +1492,9 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 	blockBatch := bc.db.NewBatch()
 	rawdb.WriteTd(blockBatch, block.Hash(), block.NumberU64(), externTd)
 	rawdb.WriteBlock(blockBatch, block)
+	fmt.Println("write receipts coming up next")
 	rawdb.WriteReceipts(blockBatch, block.Hash(), block.NumberU64(), receipts)
+	fmt.Println("write preimages coming up next")
 	rawdb.WritePreimages(blockBatch, state.Preimages())
 	if err := blockBatch.Write(); err != nil {
 		log.Crit("Failed to write block into disk", "err", err)

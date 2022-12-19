@@ -173,83 +173,90 @@ func (api *PrivateAdminAPI) NicoAdmin() (map[string]interface{}, error) {
 }
 
 // AddBlock
-func (s *PrivateAdminAPI) AddBlock(ctx context.Context, tstamp hexutil.Bytes, blockHeaders string) (bool, error) { // encodedTxs []hexutil.Bytes,
+func (s *PrivateAdminAPI) AddBlock(ctx context.Context, tstamp hexutil.Bytes, blockHeaders string) (bool, error) {
 	fmt.Println("Nico:::AddBlock")
 
 	fmt.Println("tstamp: ", tstamp)
-	// fmt.Println("encodedTxs: ", encodedTxs)
 	fmt.Println("string input: ", blockHeaders)
-	// fmt.Println("encodedHeader: ", encodedHeader)
 
 	var jsonMap map[string]interface{}
 	json.Unmarshal([]byte(blockHeaders), &jsonMap)
-
 	fmt.Println("json conversion: ", jsonMap)
 
 	var parsedHeader types.Header
 	err := json.Unmarshal([]byte(blockHeaders), &parsedHeader)
 	if err != nil {
-		panic(err)
+		return false, err
 	}
-	fmt.Println("parsed Header: ", parsedHeader)
 
-	// txs := make([]*types.Transaction, len(jsonMap["transactions"]))
-	// results := make(map[common.Hash]map[string]interface{})
-	// for i, encodedTx := range encodedTxs {
-	// 	tx := new(types.Transaction)
-	// 	// bytes can't be decoded as transaction - this really shouldn't
-	// 	// happen, there is a bug somewhere and we don't want to be silent
-	// 	if err := rlp.DecodeBytes(encodedTx, tx); err != nil {
-	// 		return false, err
-	// 	}
-	// 	txs[i] = tx
-	// 	results[tx.Hash()] = map[string]interface{}{"txIndex": i}
-	// }
+	// fmt.Println("parsed Header Cached: ", parsedHeader.CachedHash.String())
 
-	emptyTxs := make([]*types.Transaction, 0)
+	parsedTxs := jsonMap["transactions"].([]interface{})
+	fmt.Println("parsedTxs: ", parsedTxs)
 
-	fmt.Println("Nico:::AddBlock::CreateBlockFromTxs")
-	CreateBlockFromTxs(ctx, s.eth, parsedHeader, emptyTxs)
+	txs := make([]*types.Transaction, len(parsedTxs))
+	for i, inp := range parsedTxs {
+		tx := new(types.Transaction)
+
+		bytesInp, err := json.Marshal(inp)
+		if err != nil {
+			return false, err
+		}
+
+		// bytes can't be decoded as transaction - this really shouldn't
+		// happen, there is a bug somewhere and we don't want to be silent
+		if err := tx.UnmarshalJSON(bytesInp); err != nil {
+			fmt.Println("error unmarshall json: ", err)
+			return false, err
+		}
+
+		txs[i] = tx
+		fmt.Println("tx: ", tx)
+	}
+
+	// print txs
+	fmt.Println("Txs parsed: ", txs)
+
+	// parse blockHash from jsonMap
+	_blockHash := jsonMap["hash"]
+	blockHash := common.HexToHash(_blockHash.(string))
+
+	// emptyTxs := make([]*types.Transaction, 0)
+
+	// fmt.Println("Nico:::AddBlock::CreateBlockFromTxs")
+	CreateBlockFromTxs(ctx, s.eth, parsedHeader, blockHash, txs)
 
 	return true, nil
 }
 
 // CreateBlockFromTxs is a helper function that creates a new block with the given transactions and other params.
-func CreateBlockFromTxs(ctx context.Context, eth *Ethereum, header types.Header, txs []*types.Transaction) (common.Hash, error) { //  header *types.Header
+func CreateBlockFromTxs(ctx context.Context, eth *Ethereum, header types.Header, blockHash common.Hash, txs []*types.Transaction) (common.Hash, error) {
 	emptyUncles := make([]*types.Header, 0)
 	block := types.NewBlockWithHeader(&header).WithBody(txs, emptyUncles)
 
-	// print the block
-	// fmt.Println("Block: ", block)
 	fmt.Println("Block Header: ", block.Header())
-	// fmt.Println("Parsed Header: ", header)
+	fmt.Println("Block Hash from API: ", blockHash.String())
+	fmt.Println("Block Hash from precomputed: ", block.Header().CachedHash.String())
+	fmt.Println("Block Hash: ", block.Hash().String())
 
-	// add block to blockchain
-	// eth.lock.Lock()
-	// defer eth.lock.Unlock()
-	// if _, err := eth.blockchain.InsertChain([]*types.Block{block}); err != nil {
-	// 	panic(err) // This cannot happen unless the simulator is wrong, fail in that case
-	// }
-
-	// alt 2
-	// WriteBlockWithState(block *types.Block, receipts []*types.Receipt, logs []*types.Log, state *state.StateDB, emitHeadEvent bool)
 	emptyReceipts := make([]*types.Receipt, 0)
 	emptyLogs := make([]*types.Log, 0)
-	stateDB, _ := eth.blockchain.State()
+	stateDB, stateDbErr := eth.blockchain.State()
+	if stateDbErr != nil {
+		fmt.Println("eth.blockchain.State() error: ", stateDbErr)
+		panic(stateDbErr)
+	}
 
-	status, err := eth.blockchain.WriteBlockWithState(block, emptyReceipts, emptyLogs, stateDB, true)
-	// if err != nil {
-	// }
+	// WriteBlockWithState(block *types.Block, receipts []*types.Receipt, logs []*types.Log, state *state.StateDB, emitHeadEvent bool)
+	_, err := eth.blockchain.WriteBlockWithState(block, emptyReceipts, emptyLogs, stateDB, true)
+	if err != nil {
+		fmt.Println("Error adding block with hash: ", block.Hash().String(), " err: ", err)
+	}
 
-	// print status and err
-	fmt.Println("Status: ", status)
-	fmt.Println("Error: ", err)
+	// fmt.Println("Status: ", status)
+	// fmt.Println("Error: ", err)
 
-	// alternative way to write a block
-	// rawdb.WriteBody(db, hash, n, block.Body())
-	// rawdb.WriteReceipts(db, hash, n, nil)
-
-	return common.HexToHash("0x3e140b0784516af5e5ec6730f2fb20cca22f32be399b9e4ad77d32541f798cd0"), nil
+	return block.Hash(), err
 }
 
 // ExportChain exports the current blockchain into a local file,

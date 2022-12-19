@@ -5,6 +5,7 @@ package types
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -29,6 +30,7 @@ func (h Header) MarshalJSON() ([]byte, error) {
 		GasUsed     hexutil.Uint64 `json:"gasUsed"          gencodec:"required"`
 		Time        hexutil.Uint64 `json:"timestamp"        gencodec:"required"`
 		Extra       hexutil.Bytes  `json:"extraData"        gencodec:"required"`
+		CachedHash  common.Hash    `json:"preComputedHash"  gencodec:"required"`
 		MixDigest   common.Hash    `json:"mixHash"`
 		Nonce       BlockNonce     `json:"nonce"`
 		Hash        common.Hash    `json:"hash"`
@@ -47,6 +49,7 @@ func (h Header) MarshalJSON() ([]byte, error) {
 	enc.GasUsed = hexutil.Uint64(h.GasUsed)
 	enc.Time = hexutil.Uint64(h.Time)
 	enc.Extra = h.Extra
+	enc.CachedHash = h.CachedHash
 	enc.MixDigest = h.MixDigest
 	enc.Nonce = h.Nonce
 	enc.Hash = h.Hash()
@@ -69,6 +72,7 @@ func (h *Header) UnmarshalJSON(input []byte) error {
 		GasUsed     *hexutil.Uint64 `json:"gasUsed"          gencodec:"required"`
 		Time        *hexutil.Uint64 `json:"timestamp"        gencodec:"required"`
 		Extra       *hexutil.Bytes  `json:"extraData"        gencodec:"required"`
+		CachedHash  *common.Hash    `json:"preComputedHash"  gencodec:"required"`
 		MixDigest   *common.Hash    `json:"mixHash"`
 		Nonce       *BlockNonce     `json:"nonce"`
 	}
@@ -128,6 +132,9 @@ func (h *Header) UnmarshalJSON(input []byte) error {
 		return errors.New("missing required field 'extraData' for Header")
 	}
 	h.Extra = *dec.Extra
+	h.CachedHash = *dec.CachedHash
+
+	fmt.Println("gen_header_json Cached Hash: ", h.CachedHash.Hex())
 	if dec.MixDigest != nil {
 		h.MixDigest = *dec.MixDigest
 	}
