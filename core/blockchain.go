@@ -1845,6 +1845,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals bool) (int, er
 		}
 		statedb, err := state.New(parent.Root, bc.stateCache)
 		if err != nil {
+			fmt.Println("statedb err", err)
 			return it.index, err
 		}
 		// If we have a followup block, run that against the current state to pre-cache
@@ -1870,6 +1871,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals bool) (int, er
 		if err != nil {
 			bc.reportBlock(block, receipts, err)
 			atomic.StoreUint32(&followupInterrupt, 1)
+			fmt.Println("bc.processor.Process err: ", err)
 			return it.index, err
 		}
 		// Update the metrics touched during block processing
@@ -1889,6 +1891,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals bool) (int, er
 		if err := bc.validator.ValidateState(block, statedb, receipts, usedGas); err != nil {
 			bc.reportBlock(block, receipts, err)
 			atomic.StoreUint32(&followupInterrupt, 1)
+			fmt.Println("bc.validator.ValidateState err: ", err)
 			return it.index, err
 		}
 		proctime := time.Since(start)
@@ -1904,6 +1907,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals bool) (int, er
 		status, err := bc.writeBlockWithState(block, receipts, logs, statedb, false)
 		if err != nil {
 			atomic.StoreUint32(&followupInterrupt, 1)
+			fmt.Println("bc.writeBlockWithState err: ", err)
 			return it.index, err
 		}
 		atomic.StoreUint32(&followupInterrupt, 1)
