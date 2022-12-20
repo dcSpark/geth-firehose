@@ -239,24 +239,32 @@ func CreateBlockFromTxs(ctx context.Context, eth *Ethereum, header types.Header,
 	fmt.Println("Block Hash from precomputed: ", block.Header().CachedHash.String())
 	fmt.Println("Block Hash: ", block.Hash().String())
 
-	emptyReceipts := make([]*types.Receipt, 0)
-	emptyLogs := make([]*types.Log, 0)
-	stateDB, stateDbErr := eth.blockchain.State()
-	if stateDbErr != nil {
-		fmt.Println("eth.blockchain.State() error: ", stateDbErr)
-		panic(stateDbErr)
-	}
+	// alt 1
+	// emptyReceipts := make([]*types.Receipt, 0)
+	// emptyLogs := make([]*types.Log, 0)
+	// stateDB, stateDbErr := eth.blockchain.State()
+	// if stateDbErr != nil {
+	// 	fmt.Println("eth.blockchain.State() error: ", stateDbErr)
+	// 	panic(stateDbErr)
+	// }
 
 	// WriteBlockWithState(block *types.Block, receipts []*types.Receipt, logs []*types.Log, state *state.StateDB, emitHeadEvent bool)
-	_, err := eth.blockchain.WriteBlockWithState(block, emptyReceipts, emptyLogs, stateDB, true)
-	if err != nil {
-		fmt.Println("Error adding block with hash: ", block.Hash().String(), " err: ", err)
+	// _, err := eth.blockchain.WriteBlockWithState(block, emptyReceipts, emptyLogs, stateDB, true)
+	// if err != nil {
+	// 	fmt.Println("Error adding block with hash: ", block.Hash().String(), " err: ", err)
+	// }
+
+	// alt 2
+	eth.lock.Lock()
+	defer eth.lock.Unlock()
+	if _, err := eth.blockchain.InsertChain([]*types.Block{block}); err != nil {
+		panic(err) // This cannot happen unless the simulator is wrong, fail in that case
 	}
 
 	// fmt.Println("Status: ", status)
 	// fmt.Println("Error: ", err)
 
-	return block.Hash(), err
+	return block.Hash(), nil
 }
 
 // ExportChain exports the current blockchain into a local file,

@@ -58,9 +58,9 @@ func (v *BlockValidator) ValidateBody(block *types.Block) error {
 	if err := v.engine.VerifyUncles(v.bc, block); err != nil {
 		return err
 	}
-	if hash := types.CalcUncleHash(block.Uncles()); hash != header.UncleHash {
-		return fmt.Errorf("uncle root hash mismatch: have %x, want %x", hash, header.UncleHash)
-	}
+	// if hash := types.CalcUncleHash(block.Uncles()); hash != header.UncleHash {
+	// 	return fmt.Errorf("uncle root hash mismatch: have %x, want %x", hash, header.UncleHash)
+	// }
 	if hash := types.DeriveSha(block.Transactions()); hash != header.TxHash {
 		return fmt.Errorf("transaction root hash mismatch: have %x, want %x", hash, header.TxHash)
 	}
@@ -95,9 +95,9 @@ func (v *BlockValidator) ValidateState(block *types.Block, statedb *state.StateD
 	}
 	// Validate the state root against the received state root and throw
 	// an error if they don't match.
-	if root := statedb.IntermediateRoot(v.config.IsEIP158(header.Number)); header.Root != root {
-		return fmt.Errorf("invalid merkle root (remote: %x local: %x)", header.Root, root)
-	}
+	// if root := statedb.IntermediateRoot(v.config.IsEIP158(header.Number)); header.Root != root {
+	// 	return fmt.Errorf("invalid merkle root (remote: %x local: %x)", header.Root, root)
+	// }
 	return nil
 }
 

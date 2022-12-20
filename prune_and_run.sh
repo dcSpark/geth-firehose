@@ -80,7 +80,7 @@ prune_prev_state() {
 
 start_node() {
     ./build/bin/geth \
-        --networkid 200202 \
+        --networkid 2001 \
         --datadir "${DATA_PATH:-/tmp/geth_data}" \
         --dev \
         --syncmode full \
@@ -103,7 +103,6 @@ start() {
     genesis_coinbase
     genesis_gaslimit
     init_chain
-    # public_nodekey
     start_node
 }
 
