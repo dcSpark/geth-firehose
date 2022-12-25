@@ -144,7 +144,7 @@ func rplHashHeader(header *Header) (h common.Hash) {
 
 func rlpHash(x interface{}) (h common.Hash) {
 	hw := sha3.NewLegacyKeccak256()
-	rlp.Encode(hw, h)
+	rlp.Encode(hw, x)
 	hw.Sum(h[:0])
 
 	return h
