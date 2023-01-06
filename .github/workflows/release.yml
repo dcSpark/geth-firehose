@@ -93,7 +93,6 @@ jobs:
           echo "$CHANGELOG" >> $GITHUB_ENV
           echo "EOF" >> $GITHUB_ENV
 
-
       - name: Create Release
         id: create_release
         uses: actions/create-release@latest
@@ -106,9 +105,6 @@ jobs:
             ${{ env.CHANGELOG }}
           draft: false
           prerelease: false
-
-      # Check downloaded files
-      - run: ls
 
       - name: Upload Release Asset - Linux
         uses: actions/upload-release-asset@v1

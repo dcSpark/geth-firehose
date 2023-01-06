@@ -1,6 +1,7 @@
 package statefull
 
 import (
+	"context"
 	"math"
 	"math/big"
 
@@ -67,6 +68,7 @@ var dmFakeBytesS = new(big.Int).Bytes()
 
 // apply message
 func ApplyMessage(
+	_ context.Context,
 	msg Callmsg,
 	state *state.StateDB,
 	header *types.Header,

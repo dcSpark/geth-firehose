@@ -90,7 +90,7 @@ func (gc *GenesisContractsClient) CommitState(
 	}
 
 	msg := statefull.GetSystemMessage(common.HexToAddress(gc.StateReceiverContract), data)
-	gasUsed, err := statefull.ApplyMessage(msg, state, header, gc.chainConfig, chCtx, 0, firehoseContext)
+	gasUsed, err := statefull.ApplyMessage(context.Background(), msg, state, header, gc.chainConfig, chCtx, 0, firehoseContext)
 
 	// Logging event log with time and individual gasUsed
 	log.Info("→ committing new state", "eventRecord", event.String(gasUsed))
@@ -104,7 +104,8 @@ func (gc *GenesisContractsClient) CommitState(
 
 func (gc *GenesisContractsClient) LastStateId(snapshotNumber uint64) (*big.Int, error) {
 	blockNr := rpc.BlockNumber(snapshotNumber)
-	method := "lastStateId"
+
+	const method = "lastStateId"
 
 	data, err := gc.stateReceiverABI.Pack(method)
 	if err != nil {
