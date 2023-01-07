@@ -122,17 +122,6 @@ const (
 	BlockChainVersion uint64 = 8
 )
 
-// Firehose tweaked constants
-const (
-	// DefaultTriesInMemory keeps the default value of TriesInMemory value so we can determine if it changed.
-	// The default values is still used in the P2P network so we don't advertise that we keep more state than
-	// other Full nodes keep by default.
-	DefaultTriesInMemory = uint64(128)
-)
-
-// Firehose turned this into a `var` to allow overriding, was a `const`
-var TriesInMemory = DefaultTriesInMemory
-
 // CacheConfig contains the configuration values for the trie caching/pruning
 // that's resident in a blockchain.
 type CacheConfig struct {
@@ -418,12 +407,12 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, chainConfig *par
 		}
 
 		if firehose.GenesisConfig == nil {
-			panic(fmt.Errorf("The genesis config is not set, there is something weird as all code path should generate the correct genesis config"))
+			panic(fmt.Errorf("genesis config is not set, there is something weird as all code path should generate the correct genesis config"))
 		}
 
 		genesis := firehose.GenesisConfig.(*Genesis)
 		if genesis == nil {
-			panic(fmt.Errorf("The genesis config is not set, there is something weird as all code path should generate the correct genesis config"))
+			panic(fmt.Errorf("genesis config is not set, there is something weird as all code path should generate the correct genesis config"))
 		}
 
 		// As far as I can tell, the block's hash comes from the keccak hash of the rlp encoding
@@ -1389,7 +1378,7 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 				// diff sidechain. Suspend committing until this operation is completed.
 				header := bc.GetHeaderByNumber(chosen)
 				if header == nil {
-					log.Warn("Reorg in progress or TriesInMemory value has been increased, trie commit postponed", "number", chosen, "default_tries_in_memory", DefaultTriesInMemory, "tries_in_memory", TriesInMemory)
+					log.Warn("Reorg in progress, trie commit postponed", "number", chosen)
 				} else {
 					// If we're exceeding limits but haven't reached a large enough memory gap,
 					// warn the user that the system is becoming unstable.
