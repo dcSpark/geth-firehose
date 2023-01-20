@@ -17,6 +17,8 @@
 package core
 
 import (
+	"fmt"
+
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/consensus/misc"
@@ -55,6 +57,12 @@ func NewStateProcessor(config *params.ChainConfig, bc *BlockChain, engine consen
 // returns the amount of gas that was used in the process. If any of the
 // transactions failed to execute due to insufficient gas it will return an error.
 func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg vm.Config) (types.Receipts, []*types.Log, uint64, error) {
+	txsGasUsed := make(map[string]uint64)
+	return p.FakeProcess(block, statedb, cfg, txsGasUsed)
+}
+
+func (p *StateProcessor) FakeProcess(block *types.Block, statedb *state.StateDB, cfg vm.Config, txsGasUsed map[string]uint64) (types.Receipts, []*types.Log, uint64, error) {
+	fmt.Println("Nico>> debug")
 	var (
 		receipts  types.Receipts
 		usedGas   = new(uint64)
@@ -81,7 +89,7 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 			dmContext.StartTransaction(tx)
 		}
 
-		receipt, err := ApplyTransaction(p.config, p.bc, nil, gp, statedb, header, tx, usedGas, cfg, dmContext)
+		receipt, err := FakeApplyTransaction(p.config, p.bc, nil, gp, statedb, header, tx, usedGas, cfg, dmContext, txsGasUsed)
 		if err != nil {
 			if dmContext.Enabled() {
 				dmContext.RecordFailedTransaction(err)
@@ -123,6 +131,11 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 // for the transaction, gas used and an error if the transaction failed,
 // indicating the block was invalid.
 func ApplyTransaction(config *params.ChainConfig, bc ChainContext, author *common.Address, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, usedGas *uint64, cfg vm.Config, dmContext *deepmind.Context) (*types.Receipt, error) {
+	txsGasUsed := make(map[string]uint64)
+	return FakeApplyTransaction(config, bc, author, gp, statedb, header, tx, usedGas, cfg, dmContext, txsGasUsed)
+}
+
+func FakeApplyTransaction(config *params.ChainConfig, bc ChainContext, author *common.Address, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, usedGas *uint64, cfg vm.Config, dmContext *deepmind.Context, txsGasUsed map[string]uint64) (*types.Receipt, error) {
 	msg, err := tx.AsMessage(types.MakeSigner(config, header.Number))
 	if err != nil {
 		return nil, err
@@ -150,13 +163,22 @@ func ApplyTransaction(config *params.ChainConfig, bc ChainContext, author *commo
 	} else {
 		root = statedb.IntermediateRoot(config.IsEIP158(header.Number)).Bytes()
 	}
-	*usedGas += gas
+
+	// Nico: this is the only change
+	// Search for the gas used by the transaction in the map from txsGasUsed and assign it to *usedGas
+	// If the transaction is not found in the map, then it is the first time we are processing it
+	// and we can assign the gas used by the transaction to *usedGas
+	if gasUsed, ok := txsGasUsed[tx.Hash().String()]; ok {
+		*usedGas += gasUsed
+	} else {
+		*usedGas += gas
+	}
 
 	// Create a new receipt for the transaction, storing the intermediate root and gas used by the tx
 	// based on the eip phase, we're passing whether the root touch-delete accounts.
 	receipt := types.NewReceipt(root, failed, *usedGas)
 	receipt.TxHash = tx.Hash()
-	receipt.GasUsed = gas
+	receipt.GasUsed = *usedGas
 	// if the transaction created a contract, store the creation address in the receipt.
 	if msg.To() == nil {
 		receipt.ContractAddress = crypto.CreateAddress(vmenv.Context.Origin, tx.Nonce())
@@ -167,6 +189,9 @@ func ApplyTransaction(config *params.ChainConfig, bc ChainContext, author *commo
 	receipt.BlockHash = statedb.BlockHash()
 	receipt.BlockNumber = header.Number
 	receipt.TransactionIndex = uint(statedb.TxIndex())
+
+	json, _ := receipt.MarshalJSON()
+	fmt.Println("receipt", string(json))
 
 	return receipt, err
 }

@@ -5,7 +5,6 @@ package types
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -134,7 +133,6 @@ func (h *Header) UnmarshalJSON(input []byte) error {
 	h.Extra = *dec.Extra
 	h.CachedHash = *dec.CachedHash
 
-	fmt.Println("gen_header_json Cached Hash: ", h.CachedHash.Hex())
 	if dec.MixDigest != nil {
 		h.MixDigest = *dec.MixDigest
 	}

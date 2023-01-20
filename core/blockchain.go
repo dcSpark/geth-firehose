@@ -1492,9 +1492,7 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 	blockBatch := bc.db.NewBatch()
 	rawdb.WriteTd(blockBatch, block.Hash(), block.NumberU64(), externTd)
 	rawdb.WriteBlock(blockBatch, block)
-	fmt.Println("write receipts coming up next")
 	rawdb.WriteReceipts(blockBatch, block.Hash(), block.NumberU64(), receipts)
-	fmt.Println("write preimages coming up next")
 	rawdb.WritePreimages(blockBatch, state.Preimages())
 	if err := blockBatch.Write(); err != nil {
 		log.Crit("Failed to write block into disk", "err", err)
@@ -1631,6 +1629,11 @@ func (bc *BlockChain) addFutureBlock(block *types.Block) error {
 //
 // After insertion is done, all accumulated events will be fired.
 func (bc *BlockChain) InsertChain(chain types.Blocks) (int, error) {
+	txsGasUsed := make(map[string]uint64)
+	return bc.FakeInsertChain(chain, txsGasUsed)
+}
+
+func (bc *BlockChain) FakeInsertChain(chain types.Blocks, txsGasUsed map[string]uint64) (int, error) {
 	// Sanity check that we have something meaningful to import
 	if len(chain) == 0 {
 		return 0, nil
@@ -1659,7 +1662,7 @@ func (bc *BlockChain) InsertChain(chain types.Blocks) (int, error) {
 	// Pre-checks passed, start the full block imports
 	bc.wg.Add(1)
 	bc.chainmu.Lock()
-	n, err := bc.insertChain(chain, true)
+	n, err := bc.fakeInsertChain(chain, true, txsGasUsed)
 	bc.chainmu.Unlock()
 	bc.wg.Done()
 
@@ -1674,7 +1677,13 @@ func (bc *BlockChain) InsertChain(chain types.Blocks) (int, error) {
 // racey behaviour. If a sidechain import is in progress, and the historic state
 // is imported, but then new canon-head is added before the actual sidechain
 // completes, then the historic state could be pruned again
+
 func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals bool) (int, error) {
+	txsGasUsed := make(map[string]uint64)
+	return bc.fakeInsertChain(chain, verifySeals, txsGasUsed)
+}
+
+func (bc *BlockChain) fakeInsertChain(chain types.Blocks, verifySeals bool, txsGasUsed map[string]uint64) (int, error) {
 	// If the chain is terminating, don't even bother starting up
 	if atomic.LoadInt32(&bc.procInterrupt) == 1 {
 		return 0, nil
@@ -1701,28 +1710,14 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals bool) (int, er
 		seals[i] = verifySeals
 	}
 
-	// print nico is here
-	fmt.Println("nico is here with bc.engine: ", bc.engine)
-
 	// Remove validation
 	abort, results := bc.engine.VerifyHeaders(bc, headers, seals)
-	// print abort and result
-	fmt.Println("nico is here with abort: ", abort)
-	fmt.Println("nico is here with results: ", results)
 	defer close(abort)
-	// print nico is here
-	fmt.Println("close abort passed")
 
 	// Peek the error for the first block to decide the directing import logic
 	it := newInsertIterator(chain, results, bc.validator)
 
 	block, err := it.next()
-
-	// print block and err
-	fmt.Println("blockchain.go", 1548, block)
-
-	// print "blockchain.go", line number and err
-	fmt.Println("blockchain.go", 1568, err)
 
 	// hard coding err to be nil
 	err = nil
@@ -1798,10 +1793,6 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals bool) (int, er
 	}
 	// No validation errors for the first block (or chain prefix skipped)
 	for ; block != nil && err == nil || err == ErrKnownBlock; block, err = it.next() {
-		// print block and err and line number
-		fmt.Println("blockchain.go", 1648, block)
-		fmt.Println("blockchain.go", 1648, err)
-
 		// If the chain is terminating, stop processing blocks
 		if atomic.LoadInt32(&bc.procInterrupt) == 1 {
 			log.Debug("Premature abort during blocks processing")
@@ -1867,7 +1858,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals bool) (int, er
 		}
 		// Process block using the parent state as reference point
 		substart := time.Now()
-		receipts, logs, usedGas, err := bc.processor.Process(block, statedb, bc.vmConfig)
+		receipts, logs, usedGas, err := bc.processor.FakeProcess(block, statedb, bc.vmConfig, txsGasUsed)
 		if err != nil {
 			bc.reportBlock(block, receipts, err)
 			atomic.StoreUint32(&followupInterrupt, 1)
@@ -1888,7 +1879,8 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals bool) (int, er
 
 		// Validate the state using the default validator
 		substart = time.Now()
-		if err := bc.validator.ValidateState(block, statedb, receipts, usedGas); err != nil {
+		gasUsedFromHeader := block.GasUsed()
+		if err := bc.validator.ValidateState(block, statedb, receipts, gasUsedFromHeader); err != nil {
 			bc.reportBlock(block, receipts, err)
 			atomic.StoreUint32(&followupInterrupt, 1)
 			fmt.Println("bc.validator.ValidateState err: ", err)

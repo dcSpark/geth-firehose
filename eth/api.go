@@ -26,6 +26,7 @@ import (
 	"math/big"
 	"os"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -167,11 +168,6 @@ func NewPrivateAdminAPI(eth *Ethereum) *PrivateAdminAPI {
 	return &PrivateAdminAPI{eth: eth}
 }
 
-func (api *PrivateAdminAPI) NicoAdmin() (map[string]interface{}, error) {
-	fmt.Println("Nico:::NicoAdmin")
-	return nil, nil
-}
-
 // AddBlock
 func (s *PrivateAdminAPI) AddBlock(ctx context.Context, tstamp hexutil.Bytes, blockHeaders string) (bool, error) {
 	fmt.Println("Nico:::AddBlock")
@@ -214,55 +210,38 @@ func (s *PrivateAdminAPI) AddBlock(ctx context.Context, tstamp hexutil.Bytes, bl
 		fmt.Println("tx: ", tx)
 	}
 
-	// print txs
-	fmt.Println("Txs parsed: ", txs)
-
 	// parse blockHash from jsonMap
 	_blockHash := jsonMap["hash"]
 	blockHash := common.HexToHash(_blockHash.(string))
 
-	// emptyTxs := make([]*types.Transaction, 0)
+	txsGasUsed := make(map[string]uint64)
+	for k, v := range jsonMap["txsGasUsed"].(map[string]interface{}) {
+		fmt.Println("key: ", k, "value: ", v)
 
-	// fmt.Println("Nico:::AddBlock::CreateBlockFromTxs")
-	CreateBlockFromTxs(ctx, s.eth, parsedHeader, blockHash, txs)
+		txGasInt, err := strconv.ParseUint(v.(string), 0, 64)
+		if err != nil {
+			fmt.Println("error parsing gas: ", err)
+		}
+		txsGasUsed[k] = txGasInt
+	}
 
+	CreateBlockFromTxs(ctx, s.eth, parsedHeader, blockHash, txs, txsGasUsed)
 	return true, nil
 }
 
 // CreateBlockFromTxs is a helper function that creates a new block with the given transactions and other params.
-func CreateBlockFromTxs(ctx context.Context, eth *Ethereum, header types.Header, blockHash common.Hash, txs []*types.Transaction) (common.Hash, error) {
+func CreateBlockFromTxs(ctx context.Context, eth *Ethereum, header types.Header, blockHash common.Hash, txs []*types.Transaction, txsGasUsed map[string]uint64) (common.Hash, error) {
 	emptyUncles := make([]*types.Header, 0)
 	block := types.NewBlockWithHeader(&header).WithBody(txs, emptyUncles)
 
-	fmt.Println("Block Header: ", block.Header())
-	fmt.Println("Block Hash from API: ", blockHash.String())
-	fmt.Println("Block Hash from precomputed: ", block.Header().CachedHash.String())
-	fmt.Println("Block Hash: ", block.Hash().String())
-
-	// alt 1
-	// emptyReceipts := make([]*types.Receipt, 0)
-	// emptyLogs := make([]*types.Log, 0)
-	// stateDB, stateDbErr := eth.blockchain.State()
-	// if stateDbErr != nil {
-	// 	fmt.Println("eth.blockchain.State() error: ", stateDbErr)
-	// 	panic(stateDbErr)
-	// }
-
-	// WriteBlockWithState(block *types.Block, receipts []*types.Receipt, logs []*types.Log, state *state.StateDB, emitHeadEvent bool)
-	// _, err := eth.blockchain.WriteBlockWithState(block, emptyReceipts, emptyLogs, stateDB, true)
-	// if err != nil {
-	// 	fmt.Println("Error adding block with hash: ", block.Hash().String(), " err: ", err)
-	// }
-
-	// alt 2
+	fmt.Println("Nico:::AddBlock::InsertChain")
 	eth.lock.Lock()
 	defer eth.lock.Unlock()
-	if _, err := eth.blockchain.InsertChain([]*types.Block{block}); err != nil {
+	if _, err := eth.blockchain.FakeInsertChain([]*types.Block{block}, txsGasUsed); err != nil {
 		panic(err) // This cannot happen unless the simulator is wrong, fail in that case
 	}
 
-	// fmt.Println("Status: ", status)
-	// fmt.Println("Error: ", err)
+	fmt.Println("Status: ", eth.blockchain.CurrentBlock().NumberU64())
 
 	return block.Hash(), nil
 }
