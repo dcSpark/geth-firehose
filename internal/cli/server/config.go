@@ -60,6 +60,12 @@ type Config struct {
 	// KeyStoreDir is the directory to store keystores
 	KeyStoreDir string `hcl:"keystore,optional" toml:"keystore,optional"`
 
+	// Maximum number of messages in a batch (default=100, use 0 for no limits)
+	RPCBatchLimit uint64 `hcl:"rpc.batchlimit,optional" toml:"rpc.batchlimit,optional"`
+
+	// Maximum size (in bytes) a result of an rpc request could have (default=100000, use 0 for no limits)
+	RPCReturnDataLimit uint64 `hcl:"rpc.returndatalimit,optional" toml:"rpc.returndatalimit,optional"`
+
 	// SyncMode selects the sync protocol
 	SyncMode string `hcl:"syncmode,optional" toml:"syncmode,optional"`
 
@@ -435,12 +441,14 @@ type DeveloperConfig struct {
 
 func DefaultConfig() *Config {
 	return &Config{
-		Chain:          "mainnet",
-		Identity:       Hostname(),
-		RequiredBlocks: map[string]string{},
-		LogLevel:       "INFO",
-		DataDir:        DefaultDataDir(),
-		Ancient:        "",
+		Chain:              "mainnet",
+		Identity:           Hostname(),
+		RequiredBlocks:     map[string]string{},
+		LogLevel:           "INFO",
+		DataDir:            DefaultDataDir(),
+		Ancient:            "",
+		RPCBatchLimit:      100,
+		RPCReturnDataLimit: 100000,
 		P2P: &P2PConfig{
 			MaxPeers:     50,
 			MaxPendPeers: 50,
@@ -557,7 +565,7 @@ func DefaultConfig() *Config {
 			Preimages:     false,
 			TxLookupLimit: 2350000,
 			TriesInMemory: 128,
-			TrieTimeout:   60 * time.Minute,
+			TrieTimeout:   10 * time.Minute,
 		},
 		Accounts: &AccountsConfig{
 			Unlock:              []string{},
@@ -883,6 +891,7 @@ func (c *Config) buildEth(stack *node.Node, accountManager *accounts.Manager) (*
 		n.Preimages = c.Cache.Preimages
 		n.TxLookupLimit = c.Cache.TxLookupLimit
 		n.TrieTimeout = c.Cache.TrieTimeout
+		n.TriesInMemory = c.Cache.TriesInMemory
 	}
 
 	n.RPCGasCap = c.JsonRPC.GasCap
@@ -936,6 +945,8 @@ func (c *Config) buildEth(stack *node.Node, accountManager *accounts.Manager) (*
 	n.BorLogs = c.BorLogs
 	n.DatabaseHandles = dbHandles
 
+	n.RPCReturnDataLimit = c.RPCReturnDataLimit
+
 	if c.Ancient != "" {
 		n.DatabaseFreezer = c.Ancient
 	}
@@ -986,6 +997,7 @@ func (c *Config) buildNode() (*node.Config, error) {
 			WriteTimeout: c.JsonRPC.HttpTimeout.WriteTimeout,
 			IdleTimeout:  c.JsonRPC.HttpTimeout.IdleTimeout,
 		},
+		RPCBatchLimit: c.RPCBatchLimit,
 	}
 
 	// dev mode

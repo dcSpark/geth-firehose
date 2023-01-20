@@ -6,6 +6,8 @@ chain = "mainnet"
 datadir = "/var/lib/bor/data"
 # ancient = ""
 # keystore = "$BOR_DIR/keystore"
+# "rpc.batchlimit" = 100
+# "rpc.returndatalimit" = 100000
 syncmode = "full"
 # gcmode = "full"
 # snapshot = true
@@ -120,7 +122,7 @@ syncmode = "full"
     # noprefetch = false
     # preimages = false
     # txlookuplimit = 2350000
-    # timeout = "1h0m0s"
+    # timeout = "10m0s"
 
 [accounts]
     allow-insecure-unlock = true
