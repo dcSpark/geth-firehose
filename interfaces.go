@@ -170,6 +170,7 @@ type LogFilterer interface {
 // next available nonce using PendingNonceAt.
 type TransactionSender interface {
 	SendTransaction(ctx context.Context, tx *types.Transaction) error
+	AddBlock(ctx context.Context) (*big.Int, error)
 }
 
 // GasPricer wraps the gas price oracle, which monitors the blockchain to determine the

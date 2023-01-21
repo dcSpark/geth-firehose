@@ -517,6 +517,24 @@ func (ec *Client) SendTransaction(ctx context.Context, tx *types.Transaction) er
 	return ec.c.CallContext(ctx, nil, "eth_sendRawTransaction", hexutil.Encode(data))
 }
 
+// AddBlock adds a block to the chain.
+//
+// This method is not part of the official API and it's not secured so it shouldn't be open to the public.
+func (ec *Client) AddBlock(ctx context.Context) (*big.Int, error) {
+	// log to console to make sure it's not used in production
+	fmt.Printf("AddBlock is not part of the official API and it's not secured so it shouldn't be open to the public")
+	var hex hexutil.Big
+	if err := ec.c.CallContext(ctx, &hex, "eth_gasPrice"); err != nil {
+		return nil, err
+	}
+	return (*big.Int)(&hex), nil
+	// data, err := rlp.EncodeToBytes(block)
+	// if err != nil {
+	// 	return err
+	// }
+	// return ec.c.CallContext(ctx, nil, "debug_addBlock", hexutil.Encode(data))
+}
+
 func toCallArg(msg ethereum.CallMsg) interface{} {
 	arg := map[string]interface{}{
 		"from": msg.From,

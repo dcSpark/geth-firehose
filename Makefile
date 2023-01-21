@@ -12,6 +12,11 @@ GOBIN = ./build/bin
 GO ?= latest
 GORUN = env GO111MODULE=on go run
 
+debug:
+	go build -o ./build/bin/geth   -gcflags=all='-N -l' -v ./cmd/geth 
+	@echo "Done building."
+	@echo "Run \"$(GOBIN)/geth\" to launch geth."	
+
 geth:
 	$(GORUN) build/ci.go install ./cmd/geth
 	@echo "Done building."
@@ -19,6 +24,11 @@ geth:
 
 all:
 	$(GORUN) build/ci.go install
+
+gethops:
+	$(GORUN) build/ci.go install ./cmd/gethops
+	@echo "Done building."
+	@echo "Run \"$(GOBIN)/gethops --help\""
 
 android:
 	$(GORUN) build/ci.go aar --local

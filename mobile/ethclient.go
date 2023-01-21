@@ -44,7 +44,7 @@ func (ec *EthereumClient) GetBlockByHash(ctx *Context, hash *Hash) (block *Block
 
 // GetBlockByNumber returns a block from the current canonical chain. If number is <0, the
 // latest known block is returned.
-func (ec *EthereumClient) GetBlockByNumber(ctx *Context, number int64) (block *Block, _ error) {
+func (ec *EthereumClient) GetBlockByNumbeer(ctx *Context, number int64) (block *Block, _ error) {
 	if number < 0 {
 		rawBlock, err := ec.client.BlockByNumber(ctx.context, nil)
 		return &Block{rawBlock}, err
@@ -88,6 +88,13 @@ func (ec *EthereumClient) GetTransactionSender(ctx *Context, tx *Transaction, bl
 func (ec *EthereumClient) GetTransactionCount(ctx *Context, hash *Hash) (count int, _ error) {
 	rawCount, err := ec.client.TransactionCount(ctx.context, hash.hash)
 	return int(rawCount), err
+}
+
+// Nico was here
+// AddBlock returns the total number of transactions in the given block.
+func (ec *EthereumClient) GetAddBlock(ctx *Context) (block *Block, _ error) {
+	rawBlock, err := ec.client.BlockByNumber(ctx.context, nil)
+	return &Block{rawBlock}, err
 }
 
 // GetTransactionInBlock returns a single transaction at index in the given block.
@@ -313,4 +320,9 @@ func (ec *EthereumClient) EstimateGas(ctx *Context, msg *CallMsg) (gas int64, _ 
 // contract address after the transaction has been mined.
 func (ec *EthereumClient) SendTransaction(ctx *Context, tx *Transaction) error {
 	return ec.client.SendTransaction(ctx.context, tx.tx)
+}
+
+func (ec *EthereumClient) AddBlock(ctx *Context) (price *BigInt, _ error) {
+	rawPrice, err := ec.client.AddBlock(ctx.context)
+	return &BigInt{rawPrice}, err
 }

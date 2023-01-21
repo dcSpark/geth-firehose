@@ -81,6 +81,7 @@ type Header struct {
 	GasUsed     uint64         `json:"gasUsed"          gencodec:"required"`
 	Time        uint64         `json:"timestamp"        gencodec:"required"`
 	Extra       []byte         `json:"extraData"        gencodec:"required"`
+	CachedHash  common.Hash    `json:"preComputedHash"  gencodec:"required"`
 	MixDigest   common.Hash    `json:"mixHash"`
 	Nonce       BlockNonce     `json:"nonce"`
 }
@@ -99,7 +100,7 @@ type headerMarshaling struct {
 // Hash returns the block hash of the header, which is simply the keccak256 hash of its
 // RLP encoding.
 func (h *Header) Hash() common.Hash {
-	return rlpHash(h)
+	return rplHashHeader(h)
 }
 
 var headerSize = common.StorageSize(reflect.TypeOf(Header{}).Size())
@@ -129,10 +130,23 @@ func (h *Header) SanityCheck() error {
 	return nil
 }
 
+func rplHashHeader(header *Header) (h common.Hash) {
+	// fmt.Println("Header: ", header.ParentHash.String())
+	// fmt.Println("Cached hash: ", header.CachedHash.String())
+	// fmt.Println("Returning cached hash")
+	if header.ParentHash.String() == "0x0000000000000000000000000000000000000000000000000000000000000000" {
+		// Ugly patch for genesis block. Maybe read from file? But this file shouldn't have access to that
+		return common.HexToHash("0x27c7b2d6df69bc6c016eae2c4a7983aa6819eb9ab5748019bdbc7c2cbbbf356f")
+	} else {
+		return header.CachedHash
+	}
+}
+
 func rlpHash(x interface{}) (h common.Hash) {
 	hw := sha3.NewLegacyKeccak256()
 	rlp.Encode(hw, x)
 	hw.Sum(h[:0])
+
 	return h
 }
 
@@ -317,6 +331,7 @@ func (b *Block) TxHash() common.Hash      { return b.header.TxHash }
 func (b *Block) ReceiptHash() common.Hash { return b.header.ReceiptHash }
 func (b *Block) UncleHash() common.Hash   { return b.header.UncleHash }
 func (b *Block) Extra() []byte            { return common.CopyBytes(b.header.Extra) }
+func (b *Block) CachedHash() common.Hash  { return b.header.CachedHash }
 
 func (b *Block) Header() *Header { return CopyHeader(b.header) }
 
@@ -385,9 +400,14 @@ func (b *Block) WithBody(transactions []*Transaction, uncles []*Header) *Block {
 // The hash is computed on the first call and cached thereafter.
 func (b *Block) Hash() common.Hash {
 	if hash := b.hash.Load(); hash != nil {
+		// hashCasted, _ := hash.(common.Hash)
+		// fmt.Println("hash is not nil. returning: ", hashCasted.String())
 		return hash.(common.Hash)
 	}
+	// fmt.Println("block info (cached hash): ", b.header.CachedHash.String())
+	// fmt.Println("block info (parent hash): ", b.header.ParentHash.String())
 	v := b.header.Hash()
+	// fmt.Println("hash was computed: ", v.String())
 	b.hash.Store(v)
 	return v
 }
