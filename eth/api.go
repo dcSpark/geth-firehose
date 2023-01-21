@@ -171,24 +171,17 @@ func NewPrivateAdminAPI(eth *Ethereum) *PrivateAdminAPI {
 // AddBlock
 func (s *PrivateAdminAPI) AddBlock(ctx context.Context, tstamp hexutil.Bytes, blockHeaders string) (bool, error) {
 	fmt.Println("Nico:::AddBlock")
-
-	fmt.Println("tstamp: ", tstamp)
 	fmt.Println("string input: ", blockHeaders)
 
 	var jsonMap map[string]interface{}
 	json.Unmarshal([]byte(blockHeaders), &jsonMap)
-	fmt.Println("json conversion: ", jsonMap)
 
 	var parsedHeader types.Header
 	err := json.Unmarshal([]byte(blockHeaders), &parsedHeader)
 	if err != nil {
 		return false, err
 	}
-
-	// fmt.Println("parsed Header Cached: ", parsedHeader.CachedHash.String())
-
 	parsedTxs := jsonMap["transactions"].([]interface{})
-	fmt.Println("parsedTxs: ", parsedTxs)
 
 	txs := make([]*types.Transaction, len(parsedTxs))
 	for i, inp := range parsedTxs {
@@ -216,8 +209,6 @@ func (s *PrivateAdminAPI) AddBlock(ctx context.Context, tstamp hexutil.Bytes, bl
 
 	txsGasUsed := make(map[string]uint64)
 	for k, v := range jsonMap["txsGasUsed"].(map[string]interface{}) {
-		fmt.Println("key: ", k, "value: ", v)
-
 		txGasInt, err := strconv.ParseUint(v.(string), 0, 64)
 		if err != nil {
 			fmt.Println("error parsing gas: ", err)
@@ -225,19 +216,87 @@ func (s *PrivateAdminAPI) AddBlock(ctx context.Context, tstamp hexutil.Bytes, bl
 		txsGasUsed[k] = txGasInt
 	}
 
-	CreateBlockFromTxs(ctx, s.eth, parsedHeader, blockHash, txs, txsGasUsed)
+	logsBloom := make(map[string][]*types.Log)
+	for k, v := range jsonMap["txsBloomLogs"].(map[string]interface{}) {
+		logs := make([]*types.Log, len(v.([]interface{})))
+		for i, _ := range v.([]interface{}) {
+			log := new(types.Log)
+			log.Address = common.HexToAddress(v.([]interface{})[i].(map[string]interface{})["address"].(string))
+			log.Topics = make([]common.Hash, len(v.([]interface{})[i].(map[string]interface{})["topics"].([]interface{})))
+			for j, t := range v.([]interface{})[i].(map[string]interface{})["topics"].([]interface{}) {
+				log.Topics[j] = common.HexToHash(t.(string))
+			}
+			log.Data = common.Hex2Bytes(v.([]interface{})[i].(map[string]interface{})["data"].(string))
+			blockNumber, err := strconv.ParseUint(v.([]interface{})[i].(map[string]interface{})["blockNumber"].(string), 0, 64)
+			if err != nil {
+				fmt.Println("error parsing blockNumber: ", err)
+			}
+			log.BlockNumber = blockNumber
+			log.TxHash = common.HexToHash(v.([]interface{})[i].(map[string]interface{})["transactionHash"].(string))
+			txIndex, err := strconv.ParseUint(v.([]interface{})[i].(map[string]interface{})["transactionIndex"].(string), 0, 64)
+			if err != nil {
+				fmt.Println("error parsing transactionIndex: ", err)
+			}
+			log.TxIndex = uint(txIndex)
+			log.BlockHash = common.HexToHash(v.([]interface{})[i].(map[string]interface{})["blockHash"].(string))
+			logIndex, err := strconv.ParseUint(v.([]interface{})[i].(map[string]interface{})["logIndex"].(string), 0, 64)
+			if err != nil {
+				fmt.Println("error parsing logIndex: ", err)
+			}
+			log.Index = uint(logIndex)
+			log.Removed = v.([]interface{})[i].(map[string]interface{})["removed"].(bool)
+			logs[i] = log
+		}
+		logsBloom[k] = logs
+	}
+
+	receipts := make(map[string]*types.Receipt)
+	for i, inp := range jsonMap["txsReceipt"].(map[string]interface{}) {
+		receipt := new(types.Receipt)
+
+		status, err := strconv.ParseUint(inp.(map[string]interface{})["status"].(string), 0, 64)
+		if err != nil {
+			fmt.Println("error parsing status: ", err)
+		}
+		receipt.Status = status
+
+		cumulativeGasUsed, err := strconv.ParseUint(inp.(map[string]interface{})["cumulativeGasUsed"].(string), 0, 64)
+		if err != nil {
+			fmt.Println("error parsing cumulativeGasUsed: ", err)
+		}
+		receipt.CumulativeGasUsed = cumulativeGasUsed
+		receipt.Bloom = types.BytesToBloom(common.FromHex(inp.(map[string]interface{})["logsBloom"].(string)))
+		receipt.Logs = logsBloom[i]
+		receipt.TxHash = common.HexToHash(inp.(map[string]interface{})["transactionHash"].(string))
+		receipt.GasUsed = txsGasUsed[i]
+		receipt.BlockHash = blockHash
+
+		blockNumber, err := strconv.ParseUint(inp.(map[string]interface{})["blockNumber"].(string), 0, 64)
+		if err != nil {
+			fmt.Println("error parsing blockNumber: ", err)
+		}
+		receipt.BlockNumber = new(big.Int).SetUint64(blockNumber)
+
+		transactionIndex, err := strconv.ParseUint(inp.(map[string]interface{})["transactionIndex"].(string), 0, 64)
+		if err != nil {
+			fmt.Println("error parsing txIndex: ", err)
+		}
+		receipt.TransactionIndex = uint(transactionIndex)
+		receipts[i] = receipt
+	}
+	CreateBlockFromTxs(ctx, s.eth, parsedHeader, blockHash, txs, txsGasUsed, logsBloom, receipts)
 	return true, nil
 }
 
 // CreateBlockFromTxs is a helper function that creates a new block with the given transactions and other params.
-func CreateBlockFromTxs(ctx context.Context, eth *Ethereum, header types.Header, blockHash common.Hash, txs []*types.Transaction, txsGasUsed map[string]uint64) (common.Hash, error) {
+func CreateBlockFromTxs(ctx context.Context, eth *Ethereum, header types.Header, blockHash common.Hash, txs []*types.Transaction, txsGasUsed map[string]uint64, logsBloom map[string][]*types.Log, txsReceipts map[string]*types.Receipt) (common.Hash, error) {
 	emptyUncles := make([]*types.Header, 0)
 	block := types.NewBlockWithHeader(&header).WithBody(txs, emptyUncles)
 
 	fmt.Println("Nico:::AddBlock::InsertChain")
 	eth.lock.Lock()
 	defer eth.lock.Unlock()
-	if _, err := eth.blockchain.FakeInsertChain([]*types.Block{block}, txsGasUsed); err != nil {
+	if _, err := eth.blockchain.FakeInsertChain([]*types.Block{block}, txsGasUsed, logsBloom, txsReceipts); err != nil {
 		panic(err) // This cannot happen unless the simulator is wrong, fail in that case
 	}
 

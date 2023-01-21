@@ -88,8 +88,6 @@ func (ethash *Ethash) Author(header *types.Header) (common.Address, error) {
 // VerifyHeader checks whether a header conforms to the consensus rules of the
 // stock Ethereum ethash engine.
 func (ethash *Ethash) VerifyHeader(chain consensus.ChainReader, header *types.Header, seal bool) error {
-	// print name of the function + Nico
-	fmt.Println("VerifyHeader + Nico")
 	// If we're running a full engine faking, accept any input as valid
 	if ethash.config.PowMode == ModeFullFake {
 		return nil
@@ -114,7 +112,6 @@ func (ethash *Ethash) VerifyHeaders(chain consensus.ChainReader, headers []*type
 	// This was modified to always enter the if statement
 	// If we're running a full engine faking, accept any input as valid
 	if ethash.config.PowMode == ModeFullFake || len(headers) != 0 {
-		fmt.Println("VerifyHeaderS + Nico: ModeFullFake")
 		abort, results := make(chan struct{}), make(chan error, len(headers))
 		for i := 0; i < len(headers); i++ {
 			results <- nil

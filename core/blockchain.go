@@ -1492,7 +1492,7 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 	blockBatch := bc.db.NewBatch()
 	rawdb.WriteTd(blockBatch, block.Hash(), block.NumberU64(), externTd)
 	rawdb.WriteBlock(blockBatch, block)
-	rawdb.WriteReceipts(blockBatch, block.Hash(), block.NumberU64(), receipts)
+	rawdb.WriteReceipts(blockBatch, block.CachedHash(), block.NumberU64(), receipts)
 	rawdb.WritePreimages(blockBatch, state.Preimages())
 	if err := blockBatch.Write(); err != nil {
 		log.Crit("Failed to write block into disk", "err", err)
@@ -1630,10 +1630,12 @@ func (bc *BlockChain) addFutureBlock(block *types.Block) error {
 // After insertion is done, all accumulated events will be fired.
 func (bc *BlockChain) InsertChain(chain types.Blocks) (int, error) {
 	txsGasUsed := make(map[string]uint64)
-	return bc.FakeInsertChain(chain, txsGasUsed)
+	logsBloom := make(map[string][]*types.Log)
+	txsReceipts := make(map[string]*types.Receipt)
+	return bc.FakeInsertChain(chain, txsGasUsed, logsBloom, txsReceipts)
 }
 
-func (bc *BlockChain) FakeInsertChain(chain types.Blocks, txsGasUsed map[string]uint64) (int, error) {
+func (bc *BlockChain) FakeInsertChain(chain types.Blocks, txsGasUsed map[string]uint64, logsBloom map[string][]*types.Log, txsReceipts map[string]*types.Receipt) (int, error) {
 	// Sanity check that we have something meaningful to import
 	if len(chain) == 0 {
 		return 0, nil
@@ -1662,7 +1664,7 @@ func (bc *BlockChain) FakeInsertChain(chain types.Blocks, txsGasUsed map[string]
 	// Pre-checks passed, start the full block imports
 	bc.wg.Add(1)
 	bc.chainmu.Lock()
-	n, err := bc.fakeInsertChain(chain, true, txsGasUsed)
+	n, err := bc.fakeInsertChain(chain, true, txsGasUsed, logsBloom, txsReceipts)
 	bc.chainmu.Unlock()
 	bc.wg.Done()
 
@@ -1680,10 +1682,12 @@ func (bc *BlockChain) FakeInsertChain(chain types.Blocks, txsGasUsed map[string]
 
 func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals bool) (int, error) {
 	txsGasUsed := make(map[string]uint64)
-	return bc.fakeInsertChain(chain, verifySeals, txsGasUsed)
+	logsBloom := make(map[string][]*types.Log)
+	txsReceipts := make(map[string]*types.Receipt)
+	return bc.fakeInsertChain(chain, verifySeals, txsGasUsed, logsBloom, txsReceipts)
 }
 
-func (bc *BlockChain) fakeInsertChain(chain types.Blocks, verifySeals bool, txsGasUsed map[string]uint64) (int, error) {
+func (bc *BlockChain) fakeInsertChain(chain types.Blocks, verifySeals bool, txsGasUsed map[string]uint64, logsBloom map[string][]*types.Log, txsReceipts map[string]*types.Receipt) (int, error) {
 	// If the chain is terminating, don't even bother starting up
 	if atomic.LoadInt32(&bc.procInterrupt) == 1 {
 		return 0, nil
@@ -1858,7 +1862,7 @@ func (bc *BlockChain) fakeInsertChain(chain types.Blocks, verifySeals bool, txsG
 		}
 		// Process block using the parent state as reference point
 		substart := time.Now()
-		receipts, logs, usedGas, err := bc.processor.FakeProcess(block, statedb, bc.vmConfig, txsGasUsed)
+		receipts, logs, usedGas, err := bc.processor.FakeProcess(block, statedb, bc.vmConfig, txsGasUsed, logsBloom, txsReceipts)
 		if err != nil {
 			bc.reportBlock(block, receipts, err)
 			atomic.StoreUint32(&followupInterrupt, 1)
@@ -1880,11 +1884,51 @@ func (bc *BlockChain) fakeInsertChain(chain types.Blocks, verifySeals bool, txsG
 		// Validate the state using the default validator
 		substart = time.Now()
 		gasUsedFromHeader := block.GasUsed()
+		// Error: invalid merkle root
+		// remote: f07fd6f61b56af0d7df888454bcd036e30fc55446e76c11def68500e7497de0d
+		// local: 892e8b621f47de0fe1926af4a9ce55c942ef458a72eddc79e2a6daeb8b8923f0
+		// ##############################
 		if err := bc.validator.ValidateState(block, statedb, receipts, gasUsedFromHeader); err != nil {
-			bc.reportBlock(block, receipts, err)
-			atomic.StoreUint32(&followupInterrupt, 1)
-			fmt.Println("bc.validator.ValidateState err: ", err)
-			return it.index, err
+			// Nico: Experiment 2
+			root, err := statedb.Commit(bc.chainConfig.IsEIP158(block.Number()))
+			if err != nil {
+				return it.index, err
+			}
+			triedb := bc.stateCache.TrieDB()
+			// Flush an entire trie and restart the counters
+			triedb.Commit(root, true)
+
+			// Nico: just added this to see if it helps
+			localRoot := statedb.IntermediateRoot(true)
+			localTrie, err := trie.New(localRoot, bc.stateCache.TrieDB())
+			if err != nil {
+				// print error
+				fmt.Println("localTrie err: ", err)
+			}
+			// print localRoot
+			fmt.Println("localRoot: ", localRoot.String())
+			// print block.Root()
+			fmt.Println("block.Root(): ", block.Root().String())
+			localTrie.FakeForcedCommit(block.Root())
+
+			// // Hope it works
+			newTrie, err := trie.New(block.Root(), bc.stateCache.TrieDB())
+			if err != nil {
+				return it.index, err
+			}
+			// print newTrie
+			fmt.Println("newTrie: ", newTrie)
+
+			// if _, err := newTrie.Commit(nil); err != nil {
+			// 	return it.index, err
+			// }
+
+			// if err := bc.validator.ValidateState(block, statedb, receipts, gasUsedFromHeader); err != nil {
+			// 	bc.reportBlock(block, receipts, err)
+			// 	atomic.StoreUint32(&followupInterrupt, 1)
+			// 	fmt.Println("bc.validator.ValidateState err: ", err)
+			// 	return it.index, err
+			// }
 		}
 		proctime := time.Since(start)
 

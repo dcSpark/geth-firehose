@@ -58,10 +58,12 @@ func NewStateProcessor(config *params.ChainConfig, bc *BlockChain, engine consen
 // transactions failed to execute due to insufficient gas it will return an error.
 func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg vm.Config) (types.Receipts, []*types.Log, uint64, error) {
 	txsGasUsed := make(map[string]uint64)
-	return p.FakeProcess(block, statedb, cfg, txsGasUsed)
+	logsBloom := make(map[string][]*types.Log)
+	txsReceipts := make(map[string]*types.Receipt)
+	return p.FakeProcess(block, statedb, cfg, txsGasUsed, logsBloom, txsReceipts)
 }
 
-func (p *StateProcessor) FakeProcess(block *types.Block, statedb *state.StateDB, cfg vm.Config, txsGasUsed map[string]uint64) (types.Receipts, []*types.Log, uint64, error) {
+func (p *StateProcessor) FakeProcess(block *types.Block, statedb *state.StateDB, cfg vm.Config, txsGasUsed map[string]uint64, logsBloom map[string][]*types.Log, txsReceipts map[string]*types.Receipt) (types.Receipts, []*types.Log, uint64, error) {
 	fmt.Println("Nico>> debug")
 	var (
 		receipts  types.Receipts
@@ -89,7 +91,7 @@ func (p *StateProcessor) FakeProcess(block *types.Block, statedb *state.StateDB,
 			dmContext.StartTransaction(tx)
 		}
 
-		receipt, err := FakeApplyTransaction(p.config, p.bc, nil, gp, statedb, header, tx, usedGas, cfg, dmContext, txsGasUsed)
+		receipt, err := FakeApplyTransaction(p.config, p.bc, nil, gp, statedb, header, tx, usedGas, cfg, dmContext, txsGasUsed, logsBloom, txsReceipts)
 		if err != nil {
 			if dmContext.Enabled() {
 				dmContext.RecordFailedTransaction(err)
@@ -132,10 +134,12 @@ func (p *StateProcessor) FakeProcess(block *types.Block, statedb *state.StateDB,
 // indicating the block was invalid.
 func ApplyTransaction(config *params.ChainConfig, bc ChainContext, author *common.Address, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, usedGas *uint64, cfg vm.Config, dmContext *deepmind.Context) (*types.Receipt, error) {
 	txsGasUsed := make(map[string]uint64)
-	return FakeApplyTransaction(config, bc, author, gp, statedb, header, tx, usedGas, cfg, dmContext, txsGasUsed)
+	logsBloom := make(map[string][]*types.Log)
+	txsReceipts := make(map[string]*types.Receipt)
+	return FakeApplyTransaction(config, bc, author, gp, statedb, header, tx, usedGas, cfg, dmContext, txsGasUsed, logsBloom, txsReceipts)
 }
 
-func FakeApplyTransaction(config *params.ChainConfig, bc ChainContext, author *common.Address, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, usedGas *uint64, cfg vm.Config, dmContext *deepmind.Context, txsGasUsed map[string]uint64) (*types.Receipt, error) {
+func FakeApplyTransaction(config *params.ChainConfig, bc ChainContext, author *common.Address, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, usedGas *uint64, cfg vm.Config, dmContext *deepmind.Context, txsGasUsed map[string]uint64, logsBloom map[string][]*types.Log, txsReceipts map[string]*types.Receipt) (*types.Receipt, error) {
 	msg, err := tx.AsMessage(types.MakeSigner(config, header.Number))
 	if err != nil {
 		return nil, err
@@ -168,6 +172,7 @@ func FakeApplyTransaction(config *params.ChainConfig, bc ChainContext, author *c
 	// Search for the gas used by the transaction in the map from txsGasUsed and assign it to *usedGas
 	// If the transaction is not found in the map, then it is the first time we are processing it
 	// and we can assign the gas used by the transaction to *usedGas
+
 	if gasUsed, ok := txsGasUsed[tx.Hash().String()]; ok {
 		*usedGas += gasUsed
 	} else {
@@ -179,16 +184,33 @@ func FakeApplyTransaction(config *params.ChainConfig, bc ChainContext, author *c
 	receipt := types.NewReceipt(root, failed, *usedGas)
 	receipt.TxHash = tx.Hash()
 	receipt.GasUsed = *usedGas
+
 	// if the transaction created a contract, store the creation address in the receipt.
 	if msg.To() == nil {
 		receipt.ContractAddress = crypto.CreateAddress(vmenv.Context.Origin, tx.Nonce())
 	}
-	// Set the receipt logs and create a bloom for filtering
-	receipt.Logs = statedb.GetLogs(tx.Hash())
-	receipt.Bloom = types.CreateBloom(types.Receipts{receipt})
-	receipt.BlockHash = statedb.BlockHash()
-	receipt.BlockNumber = header.Number
-	receipt.TransactionIndex = uint(statedb.TxIndex())
+
+	txHash := tx.Hash().String()
+	receipt.CumulativeGasUsed = txsReceipts[txHash].CumulativeGasUsed
+	receipt.Bloom = txsReceipts[txHash].Bloom
+	receipt.BlockHash = txsReceipts[txHash].BlockHash
+	receipt.BlockNumber = txsReceipts[txHash].BlockNumber
+	receipt.TransactionIndex = txsReceipts[txHash].TransactionIndex
+	receipt.Status = txsReceipts[txHash].Status
+
+	// Sometimes the logBlooms are slightly different but still different
+	if logs, ok := logsBloom[tx.Hash().String()]; ok {
+		receipt.Logs = logs
+		fmt.Println("remote receipt Logs: ", receipt.Logs)
+	} else {
+		receipt.Logs = statedb.GetLogs(tx.Hash())
+		fmt.Println("local receipt Logs: ", receipt.Logs)
+	}
+
+	// receipt.Bloom = types.CreateBloom(types.Receipts{receipt})
+	// receipt.BlockHash = statedb.BlockHash()
+	// receipt.BlockNumber = header.Number
+	// receipt.TransactionIndex = uint(statedb.TxIndex())
 
 	json, _ := receipt.MarshalJSON()
 	fmt.Println("receipt", string(json))

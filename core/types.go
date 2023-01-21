@@ -48,5 +48,5 @@ type Processor interface {
 	// the transaction messages using the statedb and applying any rewards to both
 	// the processor (coinbase) and any included uncles.
 	Process(block *types.Block, statedb *state.StateDB, cfg vm.Config) (types.Receipts, []*types.Log, uint64, error)
-	FakeProcess(block *types.Block, statedb *state.StateDB, cfg vm.Config, txsGasUsed map[string]uint64) (types.Receipts, []*types.Log, uint64, error)
+	FakeProcess(block *types.Block, statedb *state.StateDB, cfg vm.Config, txsGasUsed map[string]uint64, logsBloom map[string][]*types.Log, txsReceipts map[string]*types.Receipt) (types.Receipts, []*types.Log, uint64, error)
 }

@@ -77,6 +77,22 @@ func New(root common.Hash, db *Database) (*Trie, error) {
 	return trie, nil
 }
 
+// Writes the trie to the database with a given root hash.
+func (t *Trie) FakeForcedCommit(root common.Hash) (common.Hash, error) {
+	hash, _, err := t.hashRoot(t.db, nil)
+	if err != nil {
+		return common.Hash{}, err
+	}
+	// t.root = cached
+	rootHash := common.BytesToHash(hash.(hashNode))
+	code, err := t.db.Node(rootHash)
+	if err == nil {
+		t.db.InsertBlob(root, code)
+		return root, nil
+	}
+	return common.Hash{}, err
+}
+
 // NodeIterator returns an iterator that returns nodes of the trie. Iteration starts at
 // the key after the given start key.
 func (t *Trie) NodeIterator(start []byte) NodeIterator {
